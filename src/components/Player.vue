@@ -13,7 +13,7 @@ const START_ANGLE = Math.PI / 2;
     canMove: Boolean,
     idx: Number,
     numPlayers: Number,
-    tableSize: Number,
+    tableSize: Array,
   },
 })
 export default class Player extends Vue {
@@ -37,8 +37,8 @@ export default class Player extends Vue {
     }
 
     const angle = 2 * Math.PI / total;
-    const x = Math.cos(START_ANGLE + idx * angle) * (tSize / 2);
-    const y = Math.sin(START_ANGLE + idx * angle) * (tSize / 2);
+    const x = Math.cos(START_ANGLE + idx * angle) * (tSize[0] / 2);
+    const y = Math.sin(START_ANGLE + idx * angle) * (tSize[1] / 2);
     return {
       transform: `translate(${x}vw, ${y}vw)`,
       backgroundColor: (this.isUser) ? 'black' : '',

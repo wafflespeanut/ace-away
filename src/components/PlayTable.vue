@@ -63,13 +63,13 @@ export default class PlayTable extends Vue {
   /**
    * @returns The size of the table in viewport width unit (vw).
    */
-  private get tableSize(): number {
-    let width = 65;
+  private get tableSize(): number[] {
+    let width = 65, height = 100;
     if (screen.width > 700) {
-      width = 30;
+      height = 40;
     }
 
-    return width;
+    return [width, height];
   }
 
   /**
@@ -78,8 +78,8 @@ export default class PlayTable extends Vue {
   private get styles(): object {
     const size = this.tableSize;
     return {
-      width: `${size}vw`,
-      height: `${size}vw`,
+      width: `${size[0]}vw`,
+      height: `${size[1]}vw`,
     };
   }
 
