@@ -10,17 +10,21 @@
     </div>
     <div id="cardSelection" v-if="hasPlayers">
       <div>
-        <span class="suite" v-for="(suite, i) in suites" v-bind:key="i">
-          {{ suite }}
-        </span>
+        <span class="suite"
+              v-for="(suite, i) in suites"
+              v-bind:key="i"
+              v-bind:class="{ bright: suite.bright, selected: selectionMatches(suite) }"
+              @click="selectedSuite = selectionMatches(suite) ? null : suite">{{ suite.display }}</span>
       </div>
       <div>
-        <span class="label" v-for="(label, i) in labels" v-bind:key="i">
-          {{ label }}
-        </span>
+        <span class="label"
+              v-for="(label, i) in labels"
+              v-bind:key="i"
+              v-bind:class="{ bright: (selectedSuite != null && selectedSuite.bright), selected: selectedLabel == label }"
+              @click="selectedLabel = (selectedLabel == label) ? null : label">{{ label }}</span>
       </div>
     </div>
-    <div id="tableArea" v-bind:style="styles">
+    <div id="tableArea">
       <Player v-for="(p, idx) in players"
               v-bind:key="idx"
               v-bind:idx="idx"
@@ -60,14 +64,38 @@ function removeElementWithSelector(selector: string, timeout: number) {
 }
 
 /**
- * Timeout (ms) for the selection dropdown to disappear and player
- * placement to begin.
+ * Timeout (ms) for some actions (fading in/out).
  */
-const PLAYER_PLACING_TIMEOUT = 1000;
-/**
- * Timeout (ms) for messages fading in/out.
- */
-const MSG_TIMEOUT = 1000;
+const ACTION_TIMEOUT = 1000;
+
+const SUITES = [{
+  name: 'diamond',
+  short: 'd',
+  display: '♦',
+  bright: true,
+}, {
+  name: 'clover',
+  short: 'c',
+  display: '♣',
+  bright: false,
+}, {
+  name: 'heart',
+  short: 'h',
+  display: '♥',
+  bright: true,
+}, {
+  name: 'spade',
+  short: 's',
+  display: '♠',
+  bright: false,
+}];
+
+interface Suite {
+  name: string;
+  short: string;
+  display: string;
+  bright: boolean;
+}
 
 interface TableProperties {
   width: number;
@@ -89,9 +117,13 @@ export default class PlayTable extends Vue {
 
   private bannerMsg: string = '';
 
-  private readonly suites: string[] = ['♣', '♦', '♥', '♠'];
+  private readonly suites: Suite[] = SUITES;
 
   private readonly labels: string[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+
+  private selectedSuite: Suite | null = null;
+
+  private selectedLabel: string | null = null;
 
   /**
    * @returns Some properties of the table in viewport width units (vw).
@@ -100,10 +132,10 @@ export default class PlayTable extends Vue {
     const offsetX = 0;
     const width = 65;
     let height = 40;
-    let offsetY = 18;
+    let offsetY = 3;
     if (screen.width > 700) {
-      height = 55;
-      offsetY = 20;
+      height = 40;
+      offsetY = 8;
     }
 
     return {
@@ -118,13 +150,6 @@ export default class PlayTable extends Vue {
     return this.players.length > 0;
   }
 
-  /**
-   * @returns The styles associated with this component.
-   */
-  private get styles(): object {
-    return {};
-  }
-
   public displayMessage(banner: string, msg: string) {
     let msgEl = this.$el.querySelector('#message');
     let banEl = this.$el.querySelector('#banner');
@@ -136,7 +161,7 @@ export default class PlayTable extends Vue {
       this.bannerMsg = banner;
       msgEl.style.opacity = '1';
       banEl.style.opacity = '1';
-    }, MSG_TIMEOUT);
+    }, ACTION_TIMEOUT);
   }
 
   /**
@@ -147,7 +172,7 @@ export default class PlayTable extends Vue {
    */
   private playersSelected(total: number) {
     console.debug(`Players selected: ${total}`);
-    removeElementWithSelector('#playerSelection', PLAYER_PLACING_TIMEOUT);
+    removeElementWithSelector('#playerSelection', ACTION_TIMEOUT);
     this.displayMessage('Add your cards.', 'Pick a suite and a label to add your card.');
 
     setTimeout(() => {
@@ -157,7 +182,11 @@ export default class PlayTable extends Vue {
           this.players[idx].moveable = true;
         }, (idx + 1) * 250);
       }
-    }, PLAYER_PLACING_TIMEOUT);
+    }, ACTION_TIMEOUT);
+  }
+
+  private selectionMatches(suite: Suite): boolean {
+    return this.selectedSuite != null && this.selectedSuite.short == suite.short
   }
 }
 
@@ -171,6 +200,9 @@ export { TableProperties };
 
 #message, #banner {
   opacity: 0;
+}
+
+#message, #banner, #playerSelection {
   transition: opacity ease 1s;
 }
 
@@ -178,7 +210,6 @@ export { TableProperties };
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity ease 1s;
 }
 
 #playerSelection > span {
@@ -189,13 +220,40 @@ export { TableProperties };
   width: 60vw;
 }
 
+#cardSelection > div {
+  margin: 0 10px;
+  display: flex;
+  flex-flow: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
 #cardSelection .label {
-  margin: 5px;
+  margin: 0 5px;
+  padding: 5px;
   font-size: 4vh;
 }
 
 #cardSelection .suite {
   font-size: 9vh;
+  padding: 0 5px;
+}
+
+#cardSelection .suite, #cardSelection .label {
+  border-radius: 25%;
+}
+
+.suite.bright, .label.bright {
+  color: red;
+}
+
+.suite.selected, .label.selected {
+  background-color: black;
+  color: white;
+}
+
+.suite.selected.bright, .label.selected.bright {
+  background-color: red;
 }
 
 @media screen and (min-width: 700px) {

@@ -51,7 +51,7 @@ export default class Player extends Vue {
 <style scoped>
 .player {
   position: absolute;
-  top: 35vh;
+  top: 50vh;
   left: 46vw;
   width: 8vw;
   height: 8vw;
@@ -62,6 +62,7 @@ export default class Player extends Vue {
 
 @media screen and (min-width: 700px) {
   .player {
+    top: 40vh;
     left: 48vw;
     width: 4vw;
     height: 4vw;
