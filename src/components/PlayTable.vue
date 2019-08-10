@@ -1,18 +1,32 @@
 <template>
   <div>
+    <div id="banner">{{ bannerMsg }}</div>
+    <div id="message">{{ msg }}</div>
     <div id="playerSelection">
       <span>No. of players: </span>
       <span class="select">
-        <v-select :options="[3, 4, 5]" @input="playersSelected" placeholder="Choose..." />
+        <v-select :options="[3, 4, 5, 6]" @input="playersSelected" placeholder="Choose..." />
       </span>
     </div>
+    <div id="cardSelection" v-if="hasPlayers">
+      <div>
+        <span class="suite" v-for="(suite, i) in suites" v-bind:key="i">
+          {{ suite }}
+        </span>
+      </div>
+      <div>
+        <span class="label" v-for="(label, i) in labels" v-bind:key="i">
+          {{ label }}
+        </span>
+      </div>
+    </div>
     <div id="tableArea" v-bind:style="styles">
-      <Player v-for="p in players"
-              v-bind:key="p.idx"
-              v-bind:idx="p.idx"
+      <Player v-for="(p, idx) in players"
+              v-bind:key="idx"
+              v-bind:idx="idx"
               v-bind:numPlayers="p.total"
               v-bind:canMove="p.moveable"
-              v-bind:tableSize="tableSize" />
+              v-bind:tableProps="tableProps" />
     </div>
   </div>
 </template>
@@ -50,6 +64,17 @@ function removeElementWithSelector(selector: string, timeout: number) {
  * placement to begin.
  */
 const PLAYER_PLACING_TIMEOUT = 1000;
+/**
+ * Timeout (ms) for messages fading in/out.
+ */
+const MSG_TIMEOUT = 1000;
+
+interface TableProperties {
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+}
 
 @Component({
   components: {
@@ -60,27 +85,58 @@ export default class PlayTable extends Vue {
 
   private players: object[] = [];
 
+  private msg: string = '';
+
+  private bannerMsg: string = '';
+
+  private readonly suites: string[] = ['♣', '♦', '♥', '♠'];
+
+  private readonly labels: string[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+
   /**
-   * @returns The size of the table in viewport width unit (vw).
+   * @returns Some properties of the table in viewport width units (vw).
    */
-  private get tableSize(): number[] {
-    let width = 65, height = 100;
+  private get tableProps(): TableProperties {
+    const offsetX = 0;
+    const width = 65;
+    let height = 40;
+    let offsetY = 18;
     if (screen.width > 700) {
-      height = 40;
+      height = 55;
+      offsetY = 20;
     }
 
-    return [width, height];
+    return {
+      width,
+      height,
+      offsetX,
+      offsetY,
+    };
+  }
+
+  private get hasPlayers(): boolean {
+    return this.players.length > 0;
   }
 
   /**
    * @returns The styles associated with this component.
    */
   private get styles(): object {
-    const size = this.tableSize;
-    return {
-      width: `${size[0]}vw`,
-      height: `${size[1]}vw`,
-    };
+    return {};
+  }
+
+  public displayMessage(banner: string, msg: string) {
+    let msgEl = this.$el.querySelector('#message');
+    let banEl = this.$el.querySelector('#banner');
+    msgEl.style.opacity = '0';
+    banEl.style.opacity = '0';
+
+    setTimeout(() => {
+      this.msg = msg;
+      this.bannerMsg = banner;
+      msgEl.style.opacity = '1';
+      banEl.style.opacity = '1';
+    }, MSG_TIMEOUT);
   }
 
   /**
@@ -92,20 +148,32 @@ export default class PlayTable extends Vue {
   private playersSelected(total: number) {
     console.debug(`Players selected: ${total}`);
     removeElementWithSelector('#playerSelection', PLAYER_PLACING_TIMEOUT);
+    this.displayMessage('Add your cards.', 'Pick a suite and a label to add your card.');
 
     setTimeout(() => {
       for (const idx of Array(total).keys()) {
-        this.players.push({ idx, total, moveable: false });
+        this.players.push({ total, moveable: false });
         setTimeout(() => {
-          this.players[idx]["moveable"] = true;
+          this.players[idx].moveable = true;
         }, (idx + 1) * 250);
       }
     }, PLAYER_PLACING_TIMEOUT);
   }
 }
+
+export { TableProperties };
 </script>
 
 <style scoped>
+#banner {
+  font-size: 3.5vh;
+}
+
+#message, #banner {
+  opacity: 0;
+  transition: opacity ease 1s;
+}
+
 #playerSelection {
   display: flex;
   align-items: center;
@@ -121,13 +189,20 @@ export default class PlayTable extends Vue {
   width: 60vw;
 }
 
-#tableArea {
-  margin: 10% 12.5vw 0 12.5vw;
-  width: 65vw;
-  height: 65vw;
+#cardSelection .label {
+  margin: 5px;
+  font-size: 4vh;
+}
+
+#cardSelection .suite {
+  font-size: 9vh;
 }
 
 @media screen and (min-width: 700px) {
+  #banner {
+    font-size: 2.75vh;
+  }
+
   #playerSelection > .select {
     width: 27vw;
   }
