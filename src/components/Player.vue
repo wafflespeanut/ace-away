@@ -5,19 +5,22 @@
 <script lang="ts">
 import Vue from 'vue';
 import Component from 'vue-class-component';
-import { TableProperties } from './PlayTable.vue';
+import { TableProps } from './PlayTable.vue';
 
 const START_ANGLE = Math.PI / 2;
 
-@Component({
+// Create extension for hinting TS.
+const PlayerProps = Vue.extend({
   props: {
     canMove: Boolean,
     idx: Number,
     numPlayers: Number,
-    tableProps: Object as () => TableProperties,
+    tableProps: Object as () => TableProps,
   },
-})
-export default class Player extends Vue {
+});
+
+@Component
+export default class Player extends PlayerProps {
 
   /**
    * @returns Whether this player is the user.
