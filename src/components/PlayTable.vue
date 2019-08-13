@@ -2,13 +2,19 @@
   <div>
     <div id="banner">{{ bannerMsg }}</div>
     <div id="message">{{ msg }}</div>
-    <div id="playerSelection">
-      <span>No. of players: </span>
-      <span class="select">
-        <v-select :options="[3, 4, 5, 6]" @input="playersSelected" placeholder="Choose..." />
-      </span>
-    </div>
-    <div id="cardSelection" v-if="players.length > 0">
+    <modal width="100%" name="roomCreationDialog" v-bind:clickToClose="false">
+      <div id="roomNaming">
+        <span>Room name: </span>
+        <input v-model="roomName" placeholder="(optional)" type="text" />
+      </div>
+      <div id="playerSelection">
+        <span>No. of players: </span>
+        <span class="select">
+          <v-select :options="[3, 4, 5, 6]" @input="playersSelected" placeholder="Choose..." />
+        </span>
+      </div>
+    </modal>
+    <div id="cardSelection" v-if="false">
       <div>
         <span class="suite"
               v-for="(suite, i) in suites"
@@ -40,6 +46,13 @@ import Vue from 'vue';
 import Component from 'vue-class-component';
 
 import Player from './Player.vue';
+
+/**
+ * @returns whether this UA has a bigger screen.
+ */
+function hasBigScreen(): boolean {
+  return screen.width > 700;
+}
 
 /**
  * Query-selects an element matching the given selector and performs a callback.
@@ -146,6 +159,11 @@ export default class PlayTable extends Vue {
   private players: PlayerProps[] = [];
 
   /**
+   * Name of the room.
+   */
+  private roomName: string = '';
+
+  /**
    * Message shown at the top.
    */
   private msg: string = '';
@@ -182,8 +200,8 @@ export default class PlayTable extends Vue {
     const offsetX = 0;
     const width = 65;
     let height = 40;
-    let offsetY = 3;
-    if (screen.width > 700) {
+    let offsetY = 10;
+    if (hasBigScreen()) {
       height = 40;
       offsetY = 8;
     }
@@ -212,6 +230,14 @@ export default class PlayTable extends Vue {
     });
   }
 
+  private mounted() {
+    this.blinkElement('#banner', () => {
+      this.bannerMsg = 'Create a new room for playing!';
+    });
+
+    this.$modal.show('roomCreationDialog');
+  }
+
   /**
    * Triggered once the user has selected the no. of players.
    * This adds child (`Player`) components.
@@ -220,18 +246,19 @@ export default class PlayTable extends Vue {
    */
   private playersSelected(total: number) {
     console.debug(`Players selected: ${total}`);
-    removeElementMatching('#playerSelection', ACTION_TIMEOUT);
-    this.blinkElement('#banner', () => {
-      this.bannerMsg = 'Add your cards.';
-    });
-    this.blinkElement('#message', () => {
-      this.msg = 'Pick a suite and a label to add your card.';
-    });
+    // removeElementMatching('#playerSelection', ACTION_TIMEOUT);
+
+    // this.blinkElement('#banner', () => {
+    //   this.bannerMsg = 'Add your cards.';
+    // });
+    // this.blinkElement('#message', () => {
+    //   this.msg = 'Pick a suite and a label to add your card.';
+    // });
 
     setTimeout(() => {
       for (const idx of Array(total).keys()) {
         this.players.push({ total, moveable: false });
-        setTimeout(() => {
+        setTimeout(() => { // transition
           this.players[idx].moveable = true;
         }, (idx + 1) * 250);
       }
@@ -239,7 +266,7 @@ export default class PlayTable extends Vue {
   }
 
   /**
-   * Returns whether the given suite matches the suite that's already been selected (if any).
+   * @returns whether the given suite matches the suite that's already been selected (if any).
    */
   private selectionMatches(suite: Suite): boolean {
     return this.selectedSuite != null && this.selectedSuite.short === suite.short;
@@ -262,10 +289,14 @@ export { TableProps };
   transition: opacity ease 1s;
 }
 
-#playerSelection {
+#playerSelection, #roomNaming {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+#roomNaming > input {
+  margin: 8px;
 }
 
 #playerSelection > span {
@@ -277,7 +308,6 @@ export { TableProps };
 }
 
 #cardSelection > div {
-  margin: 0 10px;
   display: flex;
   flex-flow: wrap;
   align-items: center;
@@ -285,7 +315,6 @@ export { TableProps };
 }
 
 #cardSelection .label {
-  margin: 0 5px;
   padding: 5px;
   font-size: 4vh;
 }
@@ -296,6 +325,7 @@ export { TableProps };
 }
 
 #cardSelection .suite, #cardSelection .label {
+  margin: 0 8px;
   border-radius: 25%;
 }
 

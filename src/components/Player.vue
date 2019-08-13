@@ -54,7 +54,7 @@ export default class Player extends PlayerProps {
 <style scoped>
 .player {
   position: absolute;
-  top: 50vh;
+  top: 20vh;
   left: 46vw;
   width: 8vw;
   height: 8vw;
@@ -65,7 +65,7 @@ export default class Player extends PlayerProps {
 
 @media screen and (min-width: 700px) {
   .player {
-    top: 40vh;
+    top: 30vh;
     left: 48vw;
     width: 4vw;
     height: 4vw;
