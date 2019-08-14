@@ -10,9 +10,10 @@
       <div id="playerSelection">
         <span>No. of players: </span>
         <span class="select">
-          <v-select :options="[3, 4, 5, 6]" @input="playersSelected" placeholder="Choose..." />
+          <v-select :options="[3, 4, 5, 6]" v-model="numPlayers" placeholder="Choose..." />
         </span>
       </div>
+      <button>Done</button>
     </modal>
     <div id="cardSelection" v-if="false">
       <div>
@@ -34,7 +35,7 @@
       <Player v-for="(p, idx) in players"
               v-bind:key="idx"
               v-bind:idx="idx"
-              v-bind:numPlayers="p.total"
+              v-bind:numPlayers="numPlayers"
               v-bind:canMove="p.moveable"
               v-bind:tableProps="tableProps" />
     </div>
@@ -133,7 +134,6 @@ const SUITES = [{
  * Represents the properties passed to player component.
  */
 interface PlayerProps {
-  total: number;
   moveable: boolean;
 }
 
@@ -157,6 +157,11 @@ export default class PlayTable extends Vue {
    * Players in this table.
    */
   private players: PlayerProps[] = [];
+
+  /**
+   * Number of players chosen by the user.
+   */
+  private numPlayers: number | null = null;
 
   /**
    * Name of the room.
@@ -231,11 +236,7 @@ export default class PlayTable extends Vue {
   }
 
   private mounted() {
-    this.blinkElement('#banner', () => {
-      this.bannerMsg = 'Create a new room for playing!';
-    });
-
-    this.$modal.show('roomCreationDialog');
+    // this.$modal.show('roomCreationDialog');
   }
 
   /**
@@ -257,7 +258,7 @@ export default class PlayTable extends Vue {
 
     setTimeout(() => {
       for (const idx of Array(total).keys()) {
-        this.players.push({ total, moveable: false });
+        this.players.push({ moveable: false });
         setTimeout(() => { // transition
           this.players[idx].moveable = true;
         }, (idx + 1) * 250);
