@@ -33,14 +33,13 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 		}
 
 		roomID := strings.TrimSpace(msg.Room)
-		log.Printf("Incoming message from player %s for room %s\n", playerID, roomID)
-		_, roomExists := hub.rooms[roomID]
+		log.Printf("Incoming message (event: %s) from player %s for room %s\n", msg.Event, playerID, roomID)
 
 		var responseErr *HandlerError
 
-		if msg.Event == eventRoomCreate && !roomExists {
+		if msg.Event == eventRoomCreate {
 			responseErr = hub.createRoomWithPlayer(ws, roomID, playerID, msg.Data)
-		} else if msg.Event == eventPlayerJoin && roomExists {
+		} else if msg.Event == eventPlayerJoin {
 			responseErr = hub.addPlayer(ws, roomID, playerID)
 		}
 

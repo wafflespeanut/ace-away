@@ -38,12 +38,19 @@ func (r Room) playerIDs() []string {
 // AddUser to a room. The room must exist at this point. Also does some sanity
 // checks to ensure that some player cannot override someone else's stuff.
 func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *HandlerError {
-	_, exists := hub.connRooms[ws]
+	room, exists := hub.rooms[roomID]
+	if !exists {
+		return &HandlerError{
+			Msg:   fmt.Sprintf("Room %s doesn't exist. Feel free to create one!", roomID),
+			Event: eventRoomMissing,
+		}
+	}
+
+	_, exists = hub.connRooms[ws]
 	if !exists {
 		hub.connRooms[ws] = roomID
 	}
 
-	room := hub.rooms[roomID]
 	_, exists = room.players[playerID]
 	if exists {
 		return &HandlerError{
@@ -95,6 +102,12 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID string, playerID
 	if err != nil {
 		return &HandlerError{
 			Msg: "Invalid request for creating room.",
+		}
+	}
+
+	if req.Players < minPlayers || req.Players > maxPlayers {
+		return &HandlerError{
+			Msg: fmt.Sprintf("Only %d-%d players are allowed.", minPlayers, maxPlayers),
 		}
 	}
 

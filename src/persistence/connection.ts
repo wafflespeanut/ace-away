@@ -11,6 +11,10 @@ export default class ConnectionProvider implements GameEventHub {
     this.sendMessage(req);
   }
 
+  public joinRoom(req: ClientMessage<{}>) {
+    this.sendMessage(req);
+  }
+
   public onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void) {
     this.callbacks[GameEvent.playerJoin] = callback;
   }
@@ -21,7 +25,7 @@ export default class ConnectionProvider implements GameEventHub {
     if (cb) {
       cb(data);
     } else {
-      console.debug('Ignoring unknown event response', data);
+      console.warn('Ignoring unknown event response', data);
     }
   }
 

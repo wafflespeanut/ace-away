@@ -13,7 +13,7 @@
       <v-container class="fill-height" fluid>
         <!--  -->
       </v-container>
-      <CreateRoom :players="allowedPlayers" :showDialog="isNewSession" />
+      <JoinRoom @joined="playerJoined" :players="allowedPlayers" :showDialog="!roomJoined" />
     </v-content>
     <v-footer app>
       <span class="white--text">&copy; 2019 @wafflespeanut</span>
@@ -24,29 +24,29 @@
 <script lang="ts">
 import Vue from 'vue';
 import Component from 'vue-class-component';
-import CreateRoom from './dialog/CreateRoom.vue';
-import { ClientMessage, RoomCreationRequest } from './persistence/model';
+import JoinRoom from './dialog/JoinRoom.vue';
+import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 
 const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 
 @Component({
   components: {
-    CreateRoom,
+    JoinRoom,
   },
 })
 export default class App extends Vue {
-  /**
-   * @returns whether the player is creating a new room.
-   */
-  private get isNewSession(): boolean {
-    return this.roomCreated || window.location.pathname.indexOf('join') === -1;
-  }
 
   private drawerOpen: boolean = false;
 
-  private roomCreated: boolean = false;
+  private roomJoined: boolean = false;
 
   private allowedPlayers: number[] = ALLOWED_PLAYERS;
+
+  private playerJoined(player: string, resp: ServerMessage<RoomResponse>) {
+    if (resp.player === player) {
+      this.roomJoined = true;
+    }
+  }
 }
 export { ALLOWED_PLAYERS };
 </script>

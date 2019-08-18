@@ -17,6 +17,7 @@ const (
 
 	eventRoomCreate   = "RoomCreate"
 	eventRoomExists   = "RoomExists"
+	eventRoomMissing  = "RoomMissing"
 	eventPlayerExists = "PlayerExists"
 
 	minPlayers = 3
