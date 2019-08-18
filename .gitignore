@@ -23,3 +23,4 @@ yarn-error.log*
 # Go stuff
 go.sum
 ace_away
+pkg/

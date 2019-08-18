@@ -12,9 +12,15 @@ import (
 )
 
 const (
-	eventRoomCreate = "RoomCreate"
-	eventUserJoin   = "UserJoin"
-	eventUserMsg    = "UserMsg"
+	eventPlayerJoin = "PlayerJoin"
+	eventPlayerMsg  = "PlayerMsg"
+
+	eventRoomCreate   = "RoomCreate"
+	eventRoomExists   = "RoomExists"
+	eventPlayerExists = "PlayerExists"
+
+	minPlayers = 3
+	maxPlayers = 6
 )
 
 func main() {

@@ -1,6 +1,9 @@
 
 all: build
 
+prepare:
+	npm install
+
 build:
 	npm run build
 	cd server && go build

@@ -13,18 +13,7 @@
       <v-container class="fill-height" fluid>
         <!--  -->
       </v-container>
-      <v-dialog v-model="dialogShow" persistent>
-        <v-card>
-          <v-card-title class="headline">{{ dialogHeading }}</v-card-title>
-          <v-card-text>{{ dialogMessage }}</v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn v-for="(button, i) in dialogButtons" v-bind:key="i"
-                   color="red darken-1" text
-                   @click="button.handler">{{ button.content }}</v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+      <CreateRoom :players="allowedPlayers" :showDialog="isNewSession" />
     </v-content>
     <v-footer app>
       <span class="white--text">&copy; 2019 @wafflespeanut</span>
@@ -35,46 +24,29 @@
 <script lang="ts">
 import Vue from 'vue';
 import Component from 'vue-class-component';
+import CreateRoom from './dialog/CreateRoom.vue';
+import { ClientMessage, RoomCreationRequest } from './persistence/model';
 
-interface DialogButton {
-  handler: () => void;
-  content: string;
-}
+const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 
 @Component({
-  components: {},
+  components: {
+    CreateRoom,
+  },
 })
 export default class App extends Vue {
-
-  private source: string = '';
-
-  private dialogShow: boolean = false;
-
-  private dialogHeading: string = '';
-
-  private dialogMessage: string = '';
+  /**
+   * @returns whether the player is creating a new room.
+   */
+  private get isNewSession(): boolean {
+    return this.roomCreated || window.location.pathname.indexOf('join') === -1;
+  }
 
   private drawerOpen: boolean = false;
 
-  private dialogButtons: DialogButton[] = [];
+  private roomCreated: boolean = false;
 
-  private mounted() {
-    this.prepareForRoomCreation();
-  }
-
-  /**
-   * Sets the dialogs, messages and buttons for creating a new room.
-   */
-  private prepareForRoomCreation() {
-    this.dialogHeading = 'Create Room';
-    this.dialogMessage = 'Create a new room for playing.';
-    this.dialogButtons.push({
-      handler: () => {
-        this.dialogShow = false;
-      },
-      content: 'Create',
-    });
-    this.dialogShow = true;
-  }
+  private allowedPlayers: number[] = ALLOWED_PLAYERS;
 }
+export { ALLOWED_PLAYERS };
 </script>
