@@ -101,6 +101,11 @@ export default class JoinRoom extends JoinRoomProps {
       this.$emit('joined', this.player, resp);
     });
 
+    this.conn.onError((msg) => {
+      this.loading = false;
+      this.$emit('error', msg);
+    });
+
     if (this.isJoin) {
       this.conn.joinRoom({
         player: this.player,

@@ -35,7 +35,7 @@ func (r Room) playerIDs() []string {
 	return players
 }
 
-// AddUser to a room. The room must exist at this point. Also does some sanity
+// Adds player to a room. The room must exist at this point. Also does some sanity
 // checks to ensure that some player cannot override someone else's stuff.
 func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *HandlerError {
 	room, exists := hub.rooms[roomID]
@@ -72,6 +72,7 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 			Event:  eventPlayerJoin,
 			Response: &RoomResponse{
 				Players: room.playerIDs(),
+				Max:     room.limit,
 			},
 		})
 	}
@@ -79,6 +80,7 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 	return nil
 }
 
+// Creates a room with the given data and adds the player to that room.
 func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID string, playerID string, data *json.RawMessage) *HandlerError {
 	for {
 		room, exists := hub.rooms[roomID]

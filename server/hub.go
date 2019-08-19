@@ -91,4 +91,5 @@ type RoomCreationRequest struct {
 // RoomResponse from the server.
 type RoomResponse struct {
 	Players []string `json:"players"`
+	Max     uint8    `json:"max"`
 }

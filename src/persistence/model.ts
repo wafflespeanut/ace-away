@@ -19,6 +19,7 @@ interface RoomCreationRequest {
 
 interface RoomResponse {
   players: string[];
+  max: number;
 }
 
 enum GameEvent {

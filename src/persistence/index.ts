@@ -6,5 +6,7 @@ export default interface GameEventHub {
 
     joinRoom(req: ClientMessage<{}>): void;
 
+    onError(callback: (msg: string) => void): void;
+
     onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void): void;
 }
