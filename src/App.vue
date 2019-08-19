@@ -10,7 +10,9 @@
     </v-app-bar>
     <v-content>
       <v-container fluid>
-        <v-alert v-if="alertMsg" border="top" colored-border type="info" elevation="2">{{ alertMsg }}</v-alert>
+        <v-slide-y-transition>
+          <v-alert v-if="alertMsg" border="top" colored-border :type="alertType" elevation="2">{{ alertMsg }}</v-alert>
+        </v-slide-y-transition>
         <v-item-group mandatory>
           <v-row>
             <v-col class="d-flex justify-center" v-for="(card, i) in hand" :key="i">
@@ -18,10 +20,10 @@
                 <v-slide-x-transition>
                   <v-card :color="active ? ( card.suite == 'h' || card.suite == 'd' ? 'red' : 'blue' ) : ''"
                           class="d-flex align-center justify-center"
-                          height="100"
-                          width="100"
+                          height="80"
+                          width="80"
                           @click="toggle">
-                    <span :class="active ? 'display-1 flex-grow-1 text-center' : ''">{{ card.label }} {{ prettyMap[card.suite] }}</span>
+                    <span class="display-1" :class="active ? 'flex-grow-1 text-center' : ''">{{ card.label }} {{ prettyMap[card.suite] }}</span>
                   </v-card>
                 </v-slide-x-transition>
               </v-item>
@@ -69,34 +71,15 @@ export default class App extends Vue {
 
   private drawerOpen: boolean = false;
 
-  private roomJoined: boolean = true;
+  private roomJoined: boolean = false;
 
   private notifications: string[] = [];
 
   private alertMsg: string | null = null;
 
-  private hand: Card[] = [{
-    label: Label.Two,
-    suite: Suite.Diamond,
-  }, {
-    label: Label.Six,
-    suite: Suite.Clover,
-  }, {
-    label: Label.King,
-    suite: Suite.Spade,
-  }, {
-    label: Label.Ace,
-    suite: Suite.Heart,
-  }, {
-    label: Label.Ace,
-    suite: Suite.Spade,
-  }, {
-    label: Label.Six,
-    suite: Suite.Heart,
-  }, {
-    label: Label.King,
-    suite: Suite.Clover,
-  }];
+  private alertType: string = 'info';
+
+  private hand: Card[] = [];
 
   /* Internal properties */
 
@@ -104,10 +87,13 @@ export default class App extends Vue {
 
   private created() {
     this.conn.onError(this.showError, true);
+    this.conn.onGameStart((resp) => {
+      this.hand = resp.response.hand;
+    });
   }
 
-  private playerJoined(player: string, resp: ServerMessage<RoomResponse>) {
-    if (resp.player === player) {
+  private playerJoined(self: string, resp: ServerMessage<RoomResponse>) {
+    if (resp.player === self) {
       this.roomJoined = true;
     }
 
@@ -115,7 +101,11 @@ export default class App extends Vue {
     if (diff > 0) {
       this.alertMsg = `Waiting for ${diff} more player(s).`;
     } else {
-      this.alertMsg = null;
+      this.alertMsg = 'Yay!';
+      this.alertType = 'success';
+      setTimeout(() => {
+        this.alertMsg = null;
+      }, 3000);
     }
   }
 

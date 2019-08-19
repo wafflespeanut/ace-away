@@ -1,3 +1,5 @@
+import { Card } from '@/deck';
+
 interface ClientMessage<T> {
   player: string;
   room: string;
@@ -22,12 +24,18 @@ interface RoomResponse {
   max: number;
 }
 
+interface DealResponse {
+  hand: Card[];
+  isDealer: boolean;
+}
+
 enum GameEvent {
   createRoom = 'RoomCreate',
   playerJoin = 'PlayerJoin',
   playerExists = 'PlayerExists',
   roomMissing = 'RoomMissing',
   roomExists = 'RoomExists',
+  gameStart = 'GameBegins',
 }
 
-export { ClientMessage, RoomCreationRequest, RoomResponse, GameEvent, ServerMessage };
+export { ClientMessage, DealResponse, RoomCreationRequest, RoomResponse, GameEvent, ServerMessage };

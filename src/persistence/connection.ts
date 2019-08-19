@@ -1,4 +1,4 @@
-import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse, GameEvent } from './model';
+import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse, GameEvent, DealResponse } from './model';
 import GameEventHub from './';
 
 interface Callback<F> {
@@ -23,14 +23,11 @@ export default class ConnectionProvider implements GameEventHub {
   }
 
   public onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void, persist?: boolean) {
-    if (ConnectionProvider.callbacks[GameEvent.playerJoin] === undefined) {
-      ConnectionProvider.callbacks[GameEvent.playerJoin] = [];
-    }
+    this.onEvent(GameEvent.playerJoin, callback, persist);
+  }
 
-    ConnectionProvider.callbacks[GameEvent.playerJoin]!.push({
-      callback,
-      persist,
-    });
+  public onGameStart(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean) {
+    this.onEvent(GameEvent.gameStart, callback, persist);
   }
 
   public onError(callback: (msg: string, event: GameEvent) => void, persist?: boolean) {
@@ -40,8 +37,20 @@ export default class ConnectionProvider implements GameEventHub {
     });
   }
 
+  private onEvent<R>(event: GameEvent, callback: (resp: ServerMessage<R>) => void, persist?: boolean) {
+    if (ConnectionProvider.callbacks[event] === undefined) {
+      ConnectionProvider.callbacks[event] = [];
+    }
+
+    ConnectionProvider.callbacks[event]!.push({
+      callback,
+      persist,
+    });
+  }
+
   private onMessage(event: MessageEvent) {
     const data: ServerMessage<any> = JSON.parse(event.data);
+    console.debug('Incoming message', data);
     const callbacks = ConnectionProvider.callbacks[data.event];
     if (callbacks) {
       callbacks.forEach((c) => {

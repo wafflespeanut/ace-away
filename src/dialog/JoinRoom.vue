@@ -99,7 +99,7 @@ export default class JoinRoom extends JoinRoomProps {
 
     this.conn.onPlayerJoin((resp) => {
       this.$emit('joined', this.player, resp);
-    });
+    }, true);
 
     this.conn.onError((msg, e) => {
       if (e === GameEvent.playerExists || e === GameEvent.roomMissing || e === GameEvent.roomExists) {

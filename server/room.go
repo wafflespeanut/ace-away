@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"golang.org/x/net/websocket"
 )
@@ -12,6 +13,9 @@ import (
 type Player struct {
 	conn   *websocket.Conn
 	roomID string
+	hand   []Card
+	dealer bool
+	index  uint8
 }
 
 // Room containing some players.
@@ -33,6 +37,37 @@ func (r Room) playerIDs() []string {
 	}
 
 	return players
+}
+
+// We're beginning a new game. Deal all players.
+func (hub *Hub) startGame(ws *websocket.Conn, room *Room) *HandlerError {
+	hands := randomDeckChunks(room.limit)
+	i := 0
+	for playerID, p := range room.players {
+		p.hand = hands[i]
+		// If player has a spade ace, then they're the dealer.
+		for _, card := range p.hand {
+			if card.Label == "A" && card.Suite == "s" {
+				p.dealer = true
+				break
+			}
+		}
+
+		i++
+
+		// Send dealt hands to all players.
+		websocket.JSON.Send(p.conn, &GameMessage{
+			Player: playerID,
+			Room:   p.roomID,
+			Event:  eventGameBegins,
+			Response: &DealResponse{
+				Hand:     p.hand,
+				IsDealer: p.dealer,
+			},
+		})
+	}
+
+	return nil
 }
 
 // Adds player to a room. The room must exist at this point. Also does some sanity
@@ -62,6 +97,8 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 	player := &Player{
 		conn:   ws,
 		roomID: roomID,
+		hand:   make([]Card, 0),
+		index:  uint8(len(room.players)),
 	}
 
 	room.players[playerID] = player
@@ -75,6 +112,11 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 				Max:     room.limit,
 			},
 		})
+	}
+
+	if room.isFull() {
+		log.Printf("Room %s is full. Starting a new game.\n", roomID)
+		return hub.startGame(ws, room)
 	}
 
 	return nil

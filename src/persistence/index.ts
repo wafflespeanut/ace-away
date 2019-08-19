@@ -1,4 +1,4 @@
-import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse, GameEvent } from './model';
+import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse, GameEvent, DealResponse } from './model';
 
 export default interface GameEventHub {
 
@@ -9,4 +9,6 @@ export default interface GameEventHub {
     onError(callback: (msg: string, event: GameEvent) => void, persist?: boolean): void;
 
     onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void, persist?: boolean): void;
+
+    onGameStart(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean): void;
 }

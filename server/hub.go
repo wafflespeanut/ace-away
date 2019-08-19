@@ -93,3 +93,15 @@ type RoomResponse struct {
 	Players []string `json:"players"`
 	Max     uint8    `json:"max"`
 }
+
+// DealResponse from the server when the game begins.
+type DealResponse struct {
+	Hand     []Card `json:"hand"`
+	IsDealer bool   `json:"isDealer"`
+}
+
+// Card from a deck.
+type Card struct {
+	Label string `json:"label"`
+	Suite string `json:"suite"`
+}

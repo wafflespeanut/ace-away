@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -14,12 +15,11 @@ import (
 const (
 	eventPlayerJoin   = "PlayerJoin"
 	eventPlayerMsg    = "PlayerMsg"
+	eventRoomCreate   = "RoomCreate"
 	eventRoomExists   = "RoomExists"
 	eventRoomMissing  = "RoomMissing"
 	eventPlayerExists = "PlayerExists"
-
-	eventRoomCreate = "RoomCreate"
-	eventGameBegins = "GameBegins"
+	eventGameBegins   = "GameBegins"
 
 	minPlayers = 3
 	maxPlayers = 6
@@ -45,5 +45,6 @@ func main() {
 	http.Handle("/", fs)
 	http.Handle("/ws", websocket.Handler(hub.serve))
 
+	log.Printf("Listening on port %d\n", *intPtr)
 	http.ListenAndServe(fmt.Sprintf(":%d", *intPtr), nil)
 }
