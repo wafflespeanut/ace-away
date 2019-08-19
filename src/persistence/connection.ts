@@ -1,13 +1,18 @@
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse, GameEvent } from './model';
 import GameEventHub from './';
 
+interface Callback<F> {
+  persist: boolean | undefined;
+  callback: F;
+}
+
 export default class ConnectionProvider implements GameEventHub {
 
   private static conn: WebSocket | null = null;
 
-  private callbacks: { [key in GameEvent]?: (resp: any) => void } = {};
+  private static callbacks: { [key in GameEvent]?: Array<Callback<(resp: any) => void>> } = {};
 
-  private errorCallback: ((msg: string) => void) | null = null;
+  private static errorCallbacks: Array<Callback<(msg: string, event: GameEvent) => void>> = [];
 
   public createRoom(req: ClientMessage<RoomCreationRequest>) {
     this.sendMessage(req);
@@ -17,21 +22,39 @@ export default class ConnectionProvider implements GameEventHub {
     this.sendMessage(req);
   }
 
-  public onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void) {
-    this.callbacks[GameEvent.playerJoin] = callback;
+  public onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void, persist?: boolean) {
+    if (ConnectionProvider.callbacks[GameEvent.playerJoin] === undefined) {
+      ConnectionProvider.callbacks[GameEvent.playerJoin] = [];
+    }
+
+    ConnectionProvider.callbacks[GameEvent.playerJoin]!.push({
+      callback,
+      persist,
+    });
   }
 
-  public onError(callback: (msg: string) => void) {
-    this.errorCallback = callback;
+  public onError(callback: (msg: string, event: GameEvent) => void, persist?: boolean) {
+    ConnectionProvider.errorCallbacks.push({
+      callback,
+      persist,
+    });
   }
 
   private onMessage(event: MessageEvent) {
     const data: ServerMessage<any> = JSON.parse(event.data);
-    const cb = this.callbacks[data.event];
-    if (cb) {
-      cb(data);
-    } else if (data.msg !== '' && this.errorCallback) {
-      this.errorCallback(data.msg);
+    const callbacks = ConnectionProvider.callbacks[data.event];
+    if (callbacks) {
+      callbacks.forEach((c) => {
+        c.callback(data);
+      });
+
+      ConnectionProvider.callbacks[data.event] = callbacks.filter((c) => c.persist);
+    } else if (data.msg !== '' && ConnectionProvider.errorCallbacks) {
+      ConnectionProvider.errorCallbacks.forEach((c) => {
+        c.callback(data.msg, data.event);
+      });
+
+      ConnectionProvider.errorCallbacks = ConnectionProvider.errorCallbacks.filter((c) => c.persist);
     } else {
       console.warn('Ignoring unknown event response', data);
     }
@@ -54,7 +77,6 @@ export default class ConnectionProvider implements GameEventHub {
     }
 
     const url = `${protocol}://${window.location.host}/ws`;
-    console.log(`Initiating websocket to ${url}.`);
     const socket = new WebSocket(url);
     socket.onopen = () => {
       ConnectionProvider.conn = socket;

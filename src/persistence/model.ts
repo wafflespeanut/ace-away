@@ -25,6 +25,9 @@ interface RoomResponse {
 enum GameEvent {
   createRoom = 'RoomCreate',
   playerJoin = 'PlayerJoin',
+  playerExists = 'PlayerExists',
+  roomMissing = 'RoomMissing',
+  roomExists = 'RoomExists',
 }
 
 export { ClientMessage, RoomCreationRequest, RoomResponse, GameEvent, ServerMessage };

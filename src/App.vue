@@ -12,7 +12,7 @@
       <v-container fluid>
         <v-alert v-if="alertMsg" border="top" colored-border type="info" elevation="2">{{ alertMsg }}</v-alert>
       </v-container>
-      <JoinRoom @error="showError" @joined="playerJoined" :players="allowedPlayers" :showDialog="!roomJoined" />
+      <JoinRoom @joined="playerJoined" :players="allowedPlayers" :showDialog="!roomJoined" />
     </v-content>
     <v-snackbar :value="true" :timeout="0" v-for="(text, i) in notifications" :key="i">
       {{ text }}
@@ -49,6 +49,12 @@ export default class App extends Vue {
   private notifications: string[] = [];
 
   private alertMsg: string | null = null;
+
+  private conn = new ConnectionProvider();
+
+  private created() {
+    this.conn.onError(this.showError, true);
+  }
 
   private playerJoined(player: string, resp: ServerMessage<RoomResponse>) {
     if (resp.player === player) {

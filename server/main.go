@@ -12,13 +12,14 @@ import (
 )
 
 const (
-	eventPlayerJoin = "PlayerJoin"
-	eventPlayerMsg  = "PlayerMsg"
-
-	eventRoomCreate   = "RoomCreate"
+	eventPlayerJoin   = "PlayerJoin"
+	eventPlayerMsg    = "PlayerMsg"
 	eventRoomExists   = "RoomExists"
 	eventRoomMissing  = "RoomMissing"
 	eventPlayerExists = "PlayerExists"
+
+	eventRoomCreate = "RoomCreate"
+	eventGameBegins = "GameBegins"
 
 	minPlayers = 3
 	maxPlayers = 6

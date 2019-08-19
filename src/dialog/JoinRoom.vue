@@ -92,7 +92,7 @@ export default class JoinRoom extends JoinRoomProps {
   private conn = new ConnectionProvider();
 
   /**
-   * Callback initiated once the user has created a room.
+   * Callback initiated once the player has created a room.
    */
   private roomCreated() {
     this.loading = true;
@@ -101,9 +101,10 @@ export default class JoinRoom extends JoinRoomProps {
       this.$emit('joined', this.player, resp);
     });
 
-    this.conn.onError((msg) => {
-      this.loading = false;
-      this.$emit('error', msg);
+    this.conn.onError((msg, e) => {
+      if (e === GameEvent.playerExists || e === GameEvent.roomMissing || e === GameEvent.roomExists) {
+        this.loading = false;
+      }
     });
 
     if (this.isJoin) {
