@@ -11,6 +11,23 @@
     <v-content>
       <v-container fluid>
         <v-alert v-if="alertMsg" border="top" colored-border type="info" elevation="2">{{ alertMsg }}</v-alert>
+        <v-item-group mandatory>
+          <v-row>
+            <v-col class="d-flex justify-center" v-for="(card, i) in hand" :key="i">
+              <v-item v-slot:default="{ active, toggle }">
+                <v-slide-x-transition>
+                  <v-card :color="active ? ( card.suite == 'h' || card.suite == 'd' ? 'red' : 'blue' ) : ''"
+                          class="d-flex align-center justify-center"
+                          height="100"
+                          width="100"
+                          @click="toggle">
+                    <span :class="active ? 'display-1 flex-grow-1 text-center' : ''">{{ card.label }} {{ prettyMap[card.suite] }}</span>
+                  </v-card>
+                </v-slide-x-transition>
+              </v-item>
+            </v-col>
+          </v-row>
+        </v-item-group>
       </v-container>
       <JoinRoom @joined="playerJoined" :players="allowedPlayers" :showDialog="!roomJoined" />
     </v-content>
@@ -27,7 +44,9 @@
 <script lang="ts">
 import Vue from 'vue';
 import Component from 'vue-class-component';
+
 import JoinRoom from './dialog/JoinRoom.vue';
+import { Card, Suite, suitePrettyMap, Label } from './deck';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
 
@@ -40,15 +59,46 @@ const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 })
 export default class App extends Vue {
 
-  private drawerOpen: boolean = false;
-
-  private roomJoined: boolean = false;
+  /* Constants used by models */
 
   private allowedPlayers: number[] = ALLOWED_PLAYERS;
+
+  private prettyMap: any = suitePrettyMap;
+
+  /* Models */
+
+  private drawerOpen: boolean = false;
+
+  private roomJoined: boolean = true;
 
   private notifications: string[] = [];
 
   private alertMsg: string | null = null;
+
+  private hand: Card[] = [{
+    label: Label.Two,
+    suite: Suite.Diamond,
+  }, {
+    label: Label.Six,
+    suite: Suite.Clover,
+  }, {
+    label: Label.King,
+    suite: Suite.Spade,
+  }, {
+    label: Label.Ace,
+    suite: Suite.Heart,
+  }, {
+    label: Label.Ace,
+    suite: Suite.Spade,
+  }, {
+    label: Label.Six,
+    suite: Suite.Heart,
+  }, {
+    label: Label.King,
+    suite: Suite.Clover,
+  }];
+
+  /* Internal properties */
 
   private conn = new ConnectionProvider();
 
