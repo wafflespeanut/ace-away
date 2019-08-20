@@ -26,8 +26,8 @@ export default class ConnectionProvider implements GameEventHub {
     this.onEvent(GameEvent.playerJoin, callback, persist);
   }
 
-  public onGameStart(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean) {
-    this.onEvent(GameEvent.gameStart, callback, persist);
+  public onPlayerTurn(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean) {
+    this.onEvent(GameEvent.playerTurn, callback, persist);
   }
 
   public onError(callback: (msg: string, event: GameEvent) => void, persist?: boolean) {

@@ -15,7 +15,21 @@ func randSeq(n int) string {
 }
 
 var (
-	labels = [...]string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
+	labels = map[string]uint8{
+		"2":  2,
+		"3":  3,
+		"4":  4,
+		"5":  5,
+		"6":  6,
+		"7":  7,
+		"8":  8,
+		"9":  9,
+		"10": 10,
+		"J":  11,
+		"Q":  12,
+		"K":  13,
+		"A":  14,
+	}
 	suites = [...]string{"d", "c", "h", "s"}
 )
 
@@ -23,7 +37,7 @@ func randomlySortedDeck() []Card {
 	deck := make([]Card, len(labels)*len(suites))
 	i := 0
 	for _, s := range suites {
-		for _, l := range labels {
+		for l := range labels {
 			deck[i] = Card{
 				Label: l,
 				Suite: s,

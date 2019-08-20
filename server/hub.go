@@ -41,6 +41,8 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 			responseErr = hub.createRoomWithPlayer(ws, roomID, playerID, msg.Data)
 		} else if msg.Event == eventPlayerJoin {
 			responseErr = hub.addPlayer(ws, roomID, playerID)
+		} else if msg.Event == eventPlayerTurn {
+			responseErr = hub.applyPlayerTurn(ws, roomID, playerID, msg.Data)
 		}
 
 		if responseErr != nil {
@@ -88,6 +90,11 @@ type RoomCreationRequest struct {
 	Players uint8 `json:"players"`
 }
 
+// TurnRequest for a player's attempt at submitting a card.
+type TurnRequest struct {
+	Card Card `json:"card"`
+}
+
 // RoomResponse from the server.
 type RoomResponse struct {
 	Players []string `json:"players"`
@@ -96,12 +103,21 @@ type RoomResponse struct {
 
 // DealResponse from the server when the game begins.
 type DealResponse struct {
-	Hand     []Card `json:"hand"`
-	IsDealer bool   `json:"isDealer"`
+	Table      []PlayerCard `json:"table"`
+	Hand       []Card       `json:"hand"`
+	IsDealer   bool         `json:"isDealer"`
+	TurnPlayer string       `json:"turnPlayer"`
+	OurTurn    bool         `json:"ourTurn"`
 }
 
 // Card from a deck.
 type Card struct {
 	Label string `json:"label"`
 	Suite string `json:"suite"`
+}
+
+// PlayerCard containing card with player ID.
+type PlayerCard struct {
+	ID   string `json:"id"`
+	Card Card   `json:"card"`
 }

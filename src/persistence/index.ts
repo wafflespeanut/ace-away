@@ -10,5 +10,5 @@ export default interface GameEventHub {
 
     onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void, persist?: boolean): void;
 
-    onGameStart(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean): void;
+    onPlayerTurn(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean): void;
 }

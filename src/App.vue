@@ -13,7 +13,37 @@
         <v-slide-y-transition>
           <v-alert v-if="alertMsg" border="top" colored-border :type="alertType" elevation="2">{{ alertMsg }}</v-alert>
         </v-slide-y-transition>
-        <v-item-group mandatory>
+        <v-row>
+          <v-col class="d-flex justify-center" v-for="(item, i) in table" :key="i">
+            <v-slide-x-transition>
+              <v-card class="d-flex flex-column align-center justify-center"
+                      height="100"
+                      width="100">
+                <div class="display-1">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
+                <div class="caption">{{ item.id }}</div>
+              </v-card>
+            </v-slide-x-transition>
+          </v-col>
+        </v-row>
+        <v-divider></v-divider>
+        <v-overlay opacity="0.5" :value="overlayTip !== null">
+          <span>{{ overlayTip }}</span>
+          <v-btn icon @click="overlayTip = null">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-overlay>
+        <v-row class="d-flex justify-center mt-5">
+          <v-tooltip right>
+            <template v-slot:activator="{ on }">
+              <v-btn icon :disabled="cardIndex === null" v-on="on" @click="sendToPile">
+                <v-icon x-large>mdi-chevron-up-circle</v-icon>
+              </v-btn>
+            </template>
+            <span>Add your card to the pile</span>
+          </v-tooltip>
+        </v-row>
+        <!-- We're gating "mandatory" because we don't need a card selected by default. -->
+        <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
           <v-row>
             <v-col class="d-flex justify-center" v-for="(card, i) in hand" :key="i">
               <v-item v-slot:default="{ active, toggle }">
@@ -37,9 +67,7 @@
       {{ text }}
       <v-btn color="pink" text @click="notifications.splice(i, 1)">Close</v-btn>
     </v-snackbar>
-    <v-footer app>
-      <span class="white--text">&copy; 2019 @wafflespeanut</span>
-    </v-footer>
+    <v-footer app></v-footer>
   </v-app>
 </template>
 
@@ -48,7 +76,7 @@ import Vue from 'vue';
 import Component from 'vue-class-component';
 
 import JoinRoom from './dialog/JoinRoom.vue';
-import { Card, Suite, suitePrettyMap, Label } from './deck';
+import { Card, Suite, suitePrettyMap, Label, PlayerCard } from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
 
@@ -71,7 +99,7 @@ export default class App extends Vue {
 
   private drawerOpen: boolean = false;
 
-  private roomJoined: boolean = false;
+  private roomJoined: boolean = true;
 
   private notifications: string[] = [];
 
@@ -79,7 +107,55 @@ export default class App extends Vue {
 
   private alertType: string = 'info';
 
-  private hand: Card[] = [];
+  private overlayTip: string | null = null;
+
+  private cardIndex: number | null = null;
+
+  private hand: Card[] = [{
+      label: Label.Six,
+      suite: Suite.Clover,
+    }, {
+      label: Label.Six,
+      suite: Suite.Clover,
+    }];
+
+  private table: PlayerCard[] = [{
+    card: {
+      label: Label.King,
+      suite: Suite.Diamond,
+    },
+    id: 'player-1',
+  }, {
+    card: {
+      label: Label.Six,
+      suite: Suite.Clover,
+    },
+    id: 'player-2',
+  }, {
+    card: {
+      label: Label.Queen,
+      suite: Suite.Spade,
+    },
+    id: 'player-3',
+  }, {
+    card: {
+      label: Label.Ace,
+      suite: Suite.Diamond,
+    },
+    id: 'player-4',
+  }, {
+    card: {
+      label: Label.Two,
+      suite: Suite.Heart,
+    },
+    id: 'player-5',
+  }, {
+    card: {
+      label: Label.Seven,
+      suite: Suite.Clover,
+    },
+    id: 'player-6',
+  }];
 
   /* Internal properties */
 
@@ -87,9 +163,10 @@ export default class App extends Vue {
 
   private created() {
     this.conn.onError(this.showError, true);
-    this.conn.onGameStart((resp) => {
+    this.conn.onPlayerTurn((resp) => {
       this.hand = resp.response.hand;
-    });
+      this.table = resp.response.table;
+    }, true);
   }
 
   private playerJoined(self: string, resp: ServerMessage<RoomResponse>) {
@@ -107,6 +184,10 @@ export default class App extends Vue {
         this.alertMsg = null;
       }, 3000);
     }
+  }
+
+  private sendToPile() {
+    //
   }
 
   private showError(msg: string) {
