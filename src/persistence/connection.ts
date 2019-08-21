@@ -1,4 +1,8 @@
-import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse, GameEvent, DealResponse } from './model';
+import {
+  ClientMessage, RoomCreationRequest, ServerMessage,
+  RoomResponse, GameEvent, DealResponse, TurnRequest,
+} from './model';
+
 import GameEventHub from './';
 
 interface Callback<F> {
@@ -22,12 +26,24 @@ export default class ConnectionProvider implements GameEventHub {
     this.sendMessage(req);
   }
 
+  public showCard(req: ClientMessage<TurnRequest>) {
+    this.sendMessage(req);
+  }
+
   public onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void, persist?: boolean) {
     this.onEvent(GameEvent.playerJoin, callback, persist);
   }
 
   public onPlayerTurn(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean) {
     this.onEvent(GameEvent.playerTurn, callback, persist);
+  }
+
+  public onPlayerWin(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
+    this.onEvent(GameEvent.playerWins, callback, persist);
+  }
+
+  public onGameOver(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
+    this.onEvent(GameEvent.gameOver, callback, persist);
   }
 
   public onError(callback: (msg: string, event: GameEvent) => void, persist?: boolean) {

@@ -58,13 +58,25 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 func (hub *Hub) dropConn(ws *websocket.Conn, playerID string) {
 	log.Printf("Dropping connection for player %s\n", playerID)
 	roomID, exists := hub.connRooms[ws]
-	if !exists {
+	if exists {
+		delete(hub.connRooms, ws)
+	} else {
 		return
 	}
 
 	room := hub.rooms[roomID]
-	log.Printf("Removing player %s from room %s\n", playerID, roomID)
-	delete(room.players, playerID)
+	log.Printf("Disabling player %s in room %s\n", playerID, roomID)
+	room.players[playerID].left = true
+
+	allLeft := true
+	for _, p := range room.players {
+		allLeft = allLeft && p.left
+	}
+
+	if allLeft {
+		log.Printf("All players have left. Removing room %s\n", roomID)
+		delete(hub.rooms, roomID)
+	}
 }
 
 // Models

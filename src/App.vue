@@ -13,35 +13,6 @@
         <v-slide-y-transition>
           <v-alert v-if="alertMsg" border="top" colored-border :type="alertType" elevation="2">{{ alertMsg }}</v-alert>
         </v-slide-y-transition>
-        <v-row>
-          <v-col class="d-flex justify-center" v-for="(item, i) in table" :key="i">
-            <v-slide-x-transition>
-              <v-card class="d-flex flex-column align-center justify-center"
-                      height="100"
-                      width="100">
-                <div class="display-1">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
-                <div class="caption">{{ item.id }}</div>
-              </v-card>
-            </v-slide-x-transition>
-          </v-col>
-        </v-row>
-        <v-divider></v-divider>
-        <v-overlay opacity="0.5" :value="overlayTip !== null">
-          <span>{{ overlayTip }}</span>
-          <v-btn icon @click="overlayTip = null">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-overlay>
-        <v-row class="d-flex justify-center mt-5">
-          <v-tooltip right>
-            <template v-slot:activator="{ on }">
-              <v-btn icon :disabled="cardIndex === null" v-on="on" @click="sendToPile">
-                <v-icon x-large>mdi-chevron-up-circle</v-icon>
-              </v-btn>
-            </template>
-            <span>Add your card to the pile</span>
-          </v-tooltip>
-        </v-row>
         <!-- We're gating "mandatory" because we don't need a card selected by default. -->
         <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
           <v-row>
@@ -60,12 +31,55 @@
             </v-col>
           </v-row>
         </v-item-group>
+        <v-row class="d-flex justify-center mt-5">
+          <v-tooltip right>
+            <template v-slot:activator="{ on }">
+              <v-fab-transition>
+                <v-btn icon
+                       fab
+                       color="pink"
+                       :disabled="cardIndex === null"
+                       v-on="on"
+                       @click="sendToPile">
+                  <v-icon x-large>mdi-chevron-down-circle</v-icon>
+                </v-btn>
+              </v-fab-transition>
+            </template>
+            <span>Add your card to the pile</span>
+          </v-tooltip>
+        </v-row>
+        <v-divider></v-divider>
+        <v-row>
+          <v-col class="d-flex justify-center" v-for="(item, i) in table" :key="i">
+            <v-slide-x-transition>
+              <v-card class="d-flex flex-column align-center justify-center"
+                      height="100"
+                      width="100">
+                <div class="display-1">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
+                <div class="caption">{{ item.id }}</div>
+              </v-card>
+            </v-slide-x-transition>
+          </v-col>
+        </v-row>
+        <v-overlay opacity="0.5" v-if="overlayTip !== null">
+          <div>
+            <span class="display-1">{{ overlayTip }}</span>
+            <v-btn class="mb-4 ml-3" icon color="blue" @click="overlayTip = null">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </div>
+        </v-overlay>
+        <v-row class="d-flex justify-center" v-for="(msg, i) in temporaryMessages" :key="i">
+          <v-slide-x-transition>
+            <span class="headline mt-3">{{ msg }}</span>
+          </v-slide-x-transition>
+        </v-row>
       </v-container>
-      <JoinRoom @joined="playerJoined" :players="allowedPlayers" :showDialog="!roomJoined" />
+      <JoinRoom @joined="playersChanged" :players="allowedPlayers" :showDialog="roomJoined === null" />
     </v-content>
-    <v-snackbar :value="true" :timeout="0" v-for="(text, i) in notifications" :key="i">
-      {{ text }}
-      <v-btn color="pink" text @click="notifications.splice(i, 1)">Close</v-btn>
+    <v-snackbar class="mt-4" v-if="notification !== null" :value="true" :timeout="0">
+      {{ notification }}
+      <v-btn color="pink" text @click="notification = null">close</v-btn>
     </v-snackbar>
     <v-footer app></v-footer>
   </v-app>
@@ -76,7 +90,7 @@ import Vue from 'vue';
 import Component from 'vue-class-component';
 
 import JoinRoom from './dialog/JoinRoom.vue';
-import { Card, Suite, suitePrettyMap, Label, PlayerCard } from './persistence/model';
+import { Card, Suite, suitePrettyMap, Label, PlayerCard, GameEvent } from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
 
@@ -99,9 +113,9 @@ export default class App extends Vue {
 
   private drawerOpen: boolean = false;
 
-  private roomJoined: boolean = true;
+  private roomJoined: string | null = null;
 
-  private notifications: string[] = [];
+  private notification: string | null = null;
 
   private alertMsg: string | null = null;
 
@@ -111,51 +125,13 @@ export default class App extends Vue {
 
   private cardIndex: number | null = null;
 
-  private hand: Card[] = [{
-      label: Label.Six,
-      suite: Suite.Clover,
-    }, {
-      label: Label.Six,
-      suite: Suite.Clover,
-    }];
+  private hand: Card[] = [];
 
-  private table: PlayerCard[] = [{
-    card: {
-      label: Label.King,
-      suite: Suite.Diamond,
-    },
-    id: 'player-1',
-  }, {
-    card: {
-      label: Label.Six,
-      suite: Suite.Clover,
-    },
-    id: 'player-2',
-  }, {
-    card: {
-      label: Label.Queen,
-      suite: Suite.Spade,
-    },
-    id: 'player-3',
-  }, {
-    card: {
-      label: Label.Ace,
-      suite: Suite.Diamond,
-    },
-    id: 'player-4',
-  }, {
-    card: {
-      label: Label.Two,
-      suite: Suite.Heart,
-    },
-    id: 'player-5',
-  }, {
-    card: {
-      label: Label.Seven,
-      suite: Suite.Clover,
-    },
-    id: 'player-6',
-  }];
+  private table: PlayerCard[] = [];
+
+  private playerID: string = '';
+
+  private temporaryMessages: string[] = [];
 
   /* Internal properties */
 
@@ -166,19 +142,38 @@ export default class App extends Vue {
     this.conn.onPlayerTurn((resp) => {
       this.hand = resp.response.hand;
       this.table = resp.response.table;
+
+      if (resp.response.table.length === 0) {
+        this.postMessage('Pile has been cleared!');
+      }
+
+      if (resp.response.ourTurn) {
+        this.postMessage('Your turn.', 4);
+      } else {
+        this.postMessage(`It's ${resp.response.turnPlayer}'s turn.`, 3);
+      }
     }, true);
+
+    this.conn.onPlayerWin((resp) => {
+      this.overlayTip = `${resp.player} heroically leaves the room.`;
+    });
+
+    this.conn.onGameOver((resp) => {
+      this.overlayTip = `${resp.player} has leftover card(s) and loses.`;
+    });
   }
 
-  private playerJoined(self: string, resp: ServerMessage<RoomResponse>) {
+  private playersChanged(self: string, resp: ServerMessage<RoomResponse>) {
+    this.playerID = self;
     if (resp.player === self) {
-      this.roomJoined = true;
+      this.roomJoined = resp.room;
     }
 
     const diff = resp.response.max - resp.response.players.length;
     if (diff > 0) {
-      this.alertMsg = `Waiting for ${diff} more player(s).`;
+      this.alertMsg = `Waiting for ${diff} more player(s) in room ${resp.room}.`;
     } else {
-      this.alertMsg = 'Yay!';
+      this.alertMsg = `Yay! Let's begin!`;
       this.alertType = 'success';
       setTimeout(() => {
         this.alertMsg = null;
@@ -187,11 +182,27 @@ export default class App extends Vue {
   }
 
   private sendToPile() {
-    //
+    this.conn.showCard({
+      player: this.playerID!,
+      room: this.roomJoined!,
+      event: GameEvent.playerTurn,
+      data: {
+        card: this.hand[this.cardIndex!],
+      },
+    });
+
+    this.cardIndex = null;
+  }
+
+  private postMessage(msg: string, timeout?: number) {
+    this.temporaryMessages.push(msg);
+    setTimeout(() => {
+      this.temporaryMessages.splice(this.temporaryMessages.indexOf(msg), 1);
+    }, (timeout == null) ? 2000 : timeout * 1000);
   }
 
   private showError(msg: string) {
-    this.notifications.push(msg);
+    this.notification = msg;
   }
 }
 export { ALLOWED_PLAYERS };

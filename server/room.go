@@ -16,6 +16,7 @@ type Player struct {
 	hand   []Card
 	dealer bool
 	index  uint8
+	left   bool
 }
 
 // removeCard from the player's hand (returns `true` if the card gets removed).
@@ -57,6 +58,39 @@ type Room struct {
 	table       []PlayerCard
 }
 
+// forgottenPlayer who has left this room at some point.
+func (r *Room) forgottenPlayer() (string, *Player) {
+	for id, p := range r.players {
+		if p.left {
+			return id, p
+		}
+	}
+
+	return "", nil
+}
+
+func (r *Room) setDealerForNextRound() *Player {
+	highRank := uint8(0)
+	player := ""
+	for _, c := range r.table {
+		r := labelRanks[c.Card.Label]
+		if r > highRank {
+			highRank = r
+			player = c.ID
+		}
+	}
+
+	// Reset previous dealer.
+	for _, p := range r.players {
+		p.dealer = false
+	}
+
+	newDealer := r.players[player]
+	newDealer.dealer = true
+	r.currentTurn = newDealer.index
+	return newDealer
+}
+
 // nextPlayerWithHand returns the player following the given player index
 // with cards in their hand.
 func (r *Room) nextPlayerWithHand(index uint8) *Player {
@@ -87,21 +121,23 @@ func (r *Room) nextPlayerWithHand(index uint8) *Player {
 // addCardToTable for the given player and increment the turn.
 // Also dispose the pile if necessary.
 func (r *Room) addCardToTable(playerID string, player *Player, card Card) bool {
-	nextPlayer := r.nextPlayerWithHand(player.index)
-	if nextPlayer == nil {
-		return false
-	}
-
-	r.currentTurn = nextPlayer.index
 	r.table = append(r.table, PlayerCard{
 		ID:   playerID,
 		Card: card,
 	})
 
 	if len(r.table) == int(r.limit) {
+		r.setDealerForNextRound()
 		r.table = make([]PlayerCard, 0)
+		return true
 	}
 
+	nextPlayer := r.nextPlayerWithHand(player.index)
+	if nextPlayer == nil {
+		return false
+	}
+
+	r.currentTurn = nextPlayer.index
 	return true
 }
 
@@ -258,24 +294,7 @@ func (hub *Hub) applyPlayerTurn(ws *websocket.Conn, room *Room, playerID string,
 
 		// Player who had the highest rank gets all the junk
 		// and becomes the dealer.
-		highRank := uint8(0)
-		player := ""
-		for _, c := range room.table {
-			r := labelRanks[c.Card.Label]
-			if r > highRank {
-				highRank = r
-				player = c.ID
-			}
-		}
-
-		// Reset previous dealer.
-		for _, p := range room.players {
-			p.dealer = false
-		}
-
-		newDealer := room.players[player]
-		newDealer.dealer = true
-		room.currentTurn = newDealer.index
+		newDealer := room.setDealerForNextRound()
 		for _, c := range room.table {
 			newDealer.hand = append(newDealer.hand, c.Card)
 		}
@@ -320,6 +339,7 @@ func (hub *Hub) applyPlayerTurn(ws *websocket.Conn, room *Room, playerID string,
 // Adds player to a room. The room must exist at this point. Also does some sanity
 // checks to ensure that some player cannot override someone else's stuff.
 func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *HandlerError {
+	swapPlayer := ""
 	room, exists := hub.rooms[roomID]
 	if !exists {
 		return &HandlerError{
@@ -327,10 +347,15 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 			Event: eventRoomMissing,
 		}
 	} else if room.isFull() {
-		return &HandlerError{
-			Msg:   fmt.Sprintf("Room %s is full. Pick a different room.", roomID),
-			Event: eventRoomExists,
+		oldID, oldPlayer := room.forgottenPlayer()
+		if oldPlayer == nil {
+			return &HandlerError{
+				Msg:   fmt.Sprintf("Room %s is full. Pick a different room.", roomID),
+				Event: eventRoomExists,
+			}
 		}
+
+		swapPlayer = oldID
 	}
 
 	_, exists = hub.connRooms[ws]
@@ -353,6 +378,13 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 		index:  uint8(len(room.players)),
 	}
 
+	if swapPlayer != "" {
+		player = room.players[swapPlayer]
+		player.conn = ws
+		player.left = false
+		delete(room.players, swapPlayer)
+	}
+
 	room.players[playerID] = player
 	for _, p := range room.players {
 		websocket.JSON.Send(p.conn, &GameMessage{
@@ -366,7 +398,9 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 		})
 	}
 
-	if room.isFull() {
+	if swapPlayer != "" {
+		room.dealConnectedPlayers(ws)
+	} else if room.isFull() {
 		log.Printf("Room %s is full. Starting a new game.\n", roomID)
 		return hub.startGame(ws, room)
 	}
@@ -382,10 +416,15 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID string, playerID
 			roomID = randSeq(16)
 			continue
 		} else if exists && room.isFull() {
-			return &HandlerError{
-				Msg:   fmt.Sprintf("Room %s already exists and is full. Choose a different name.", roomID),
-				Event: eventRoomExists,
+			_, oldPlayer := room.forgottenPlayer()
+			if oldPlayer == nil {
+				return &HandlerError{
+					Msg:   fmt.Sprintf("Room %s already exists and is full. Choose a different name.", roomID),
+					Event: eventRoomExists,
+				}
 			}
+
+			return hub.addPlayer(ws, roomID, playerID)
 		} else if exists {
 			return hub.addPlayer(ws, roomID, playerID)
 		} else {

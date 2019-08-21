@@ -18,6 +18,10 @@ interface RoomCreationRequest {
   players: number;
 }
 
+interface TurnRequest {
+  card: Card;
+}
+
 interface RoomResponse {
   players: string[];
   max: number;
@@ -38,6 +42,8 @@ enum GameEvent {
   roomMissing = 'RoomMissing',
   roomExists = 'RoomExists',
   playerTurn = 'PlayerTurn',
+  playerWins = 'PlayerWin',
+  gameOver = 'GameOver',
 }
 
 interface PlayerCard {
@@ -81,7 +87,7 @@ enum Label {
 }
 
 export {
-  Card, Label, Suite, suitePrettyMap,
-  ClientMessage, DealResponse, RoomCreationRequest,
-  RoomResponse, GameEvent, ServerMessage, PlayerCard,
+  Card, Label, Suite, suitePrettyMap, ClientMessage,
+  DealResponse, RoomResponse, GameEvent, RoomCreationRequest,
+  ServerMessage, PlayerCard, TurnRequest,
 };
