@@ -15,16 +15,16 @@
         </v-slide-y-transition>
         <!-- We're gating "mandatory" because we don't need a card selected by default. -->
         <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
-          <v-row>
-            <v-col class="d-flex justify-center" v-for="(card, i) in hand" :key="i">
+          <v-row class="mx-10" v-for="(icon, suite, x) in prettyMap" :key="x">
+            <v-col class="d-flex justify-center" v-for="(card, i) in hand.filter((c) => c.suite === suite)" :key="i">
               <v-item v-slot:default="{ active, toggle }">
                 <v-slide-x-transition>
-                  <v-card :color="active ? ( card.suite == 'h' || card.suite == 'd' ? 'red' : 'blue' ) : ''"
+                  <v-card :color="active ? ( suite == 'h' || suite == 'd' ? 'red' : 'blue' ) : ''"
                           class="d-flex align-center justify-center"
                           height="80"
                           width="80"
                           @click="toggle">
-                    <span class="display-1" :class="active ? 'flex-grow-1 text-center' : ''">{{ card.label }} {{ prettyMap[card.suite] }}</span>
+                    <span class="display-1" :class="active ? 'flex-grow-1 text-center' : ''">{{ card.label }} {{ icon }}</span>
                   </v-card>
                 </v-slide-x-transition>
               </v-item>
@@ -90,7 +90,7 @@ import Vue from 'vue';
 import Component from 'vue-class-component';
 
 import JoinRoom from './dialog/JoinRoom.vue';
-import { Card, Suite, suitePrettyMap, Label, PlayerCard, GameEvent } from './persistence/model';
+import { Card, Suite, suitePrettyMap, Label, PlayerCard, GameEvent, suiteRanks, labelRanks } from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
 
@@ -140,7 +140,9 @@ export default class App extends Vue {
   private created() {
     this.conn.onError(this.showError, true);
     this.conn.onPlayerTurn((resp) => {
-      this.hand = resp.response.hand;
+      this.hand = resp.response.hand.sort((c1, c2) => {
+        return suiteRanks[c1.suite] * labelRanks[c1.label] - suiteRanks[c2.suite] * labelRanks[c2.label];
+      });
       this.table = resp.response.table;
 
       if (resp.response.table.length === 0) {

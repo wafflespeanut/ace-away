@@ -86,8 +86,31 @@ enum Label {
   Ace   = 'A',
 }
 
+const suiteRanks: any = {
+  d: 1,
+  c: 10,
+  h: 100,
+  s: 1000,
+};
+
+const labelRanks: any = {
+  2:  2,
+  3:  3,
+  4:  4,
+  5:  5,
+  6:  6,
+  7:  7,
+  8:  8,
+  9:  9,
+  10: 10,
+  J:  11,
+  Q:  12,
+  K:  13,
+  A:  14,
+};
+
 export {
-  Card, Label, Suite, suitePrettyMap, ClientMessage,
+  Card, Label, Suite, labelRanks, suiteRanks, suitePrettyMap,
   DealResponse, RoomResponse, GameEvent, RoomCreationRequest,
-  ServerMessage, PlayerCard, TurnRequest,
+  ClientMessage, ServerMessage, PlayerCard, TurnRequest,
 };

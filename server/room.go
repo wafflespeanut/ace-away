@@ -38,16 +38,16 @@ func (p *Player) removeCard(card Card) bool {
 	return false
 }
 
-// hasSuite checks whether the player has a card matching the suite
+// containsSuite checks whether the player has a card matching the suite
 // of the given card.
-func (p Player) hasSuite(card Card) bool {
+func (p Player) containsSuite(card Card) *Card {
 	for _, c := range p.hand {
 		if c.Suite == card.Suite {
-			return true
+			return &c
 		}
 	}
 
-	return false
+	return nil
 }
 
 // Room containing some players.
@@ -69,7 +69,7 @@ func (r *Room) forgottenPlayer() (string, *Player) {
 	return "", nil
 }
 
-func (r *Room) setDealerForNextRound() *Player {
+func (r *Room) setDealerForNextRound() (string, *Player) {
 	highRank := uint8(0)
 	player := ""
 	for _, c := range r.table {
@@ -88,7 +88,7 @@ func (r *Room) setDealerForNextRound() *Player {
 	newDealer := r.players[player]
 	newDealer.dealer = true
 	r.currentTurn = newDealer.index
-	return newDealer
+	return player, newDealer
 }
 
 // nextPlayerWithHand returns the player following the given player index
@@ -285,16 +285,19 @@ func (hub *Hub) applyPlayerTurn(ws *websocket.Conn, room *Room, playerID string,
 	} else {
 		// No match! If the player has that suite and is making an illegal move,
 		// reject that request.
-		if player.hasSuite(card) {
+		matchedCard := player.containsSuite(room.table[0].Card)
+		if matchedCard != nil {
 			player.hand = append(player.hand, card)
 			return &HandlerError{
-				Msg: "Illegal move. You have a card matching the suite in table.",
+				Msg: fmt.Sprintf("Illegal move. You have %s%s which matches the suite in table.",
+					matchedCard.Label, matchedCard.Suite),
 			}
 		}
 
 		// Player who had the highest rank gets all the junk
 		// and becomes the dealer.
-		newDealer := room.setDealerForNextRound()
+		_, newDealer := room.setDealerForNextRound()
+		newDealer.hand = append(newDealer.hand, card)
 		for _, c := range room.table {
 			newDealer.hand = append(newDealer.hand, c.Card)
 		}
