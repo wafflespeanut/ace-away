@@ -20,6 +20,8 @@ const (
 	eventRoomMissing  = "RoomMissing"
 	eventPlayerExists = "PlayerExists"
 	eventPlayerTurn   = "PlayerTurn"
+	eventGameOver     = "GameOver"
+	eventPlayerWins   = "PlayerWin"
 
 	minPlayers = 3
 	maxPlayers = 6

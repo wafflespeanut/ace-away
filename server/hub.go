@@ -42,7 +42,7 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 		} else if msg.Event == eventPlayerJoin {
 			responseErr = hub.addPlayer(ws, roomID, playerID)
 		} else if msg.Event == eventPlayerTurn {
-			responseErr = hub.applyPlayerTurn(ws, roomID, playerID, msg.Data)
+			responseErr = hub.validateAndApplyTurn(ws, roomID, playerID, msg.Data)
 		}
 
 		if responseErr != nil {
