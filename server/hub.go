@@ -110,7 +110,11 @@ type TurnRequest struct {
 // RoomResponse from the server.
 type RoomResponse struct {
 	Players []string `json:"players"`
+	// When a player takes place of another player who has left the room, it should
+	// be possible to show the winner(s) in the room (if any).
+	Escaped []string `json:"escaped"`
 	Max     uint8    `json:"max"`
+	TurnIdx uint8    `json:"turnIdx"`
 }
 
 // DealResponse from the server when the game begins.

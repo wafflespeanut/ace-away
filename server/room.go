@@ -146,11 +146,25 @@ func (r Room) isFull() bool {
 	return len(r.players) == int(r.limit)
 }
 
-// playerIDs returns the IDs of players in this room.
+// playerIDs returns the IDs of players in this room
+// in the order they'd joined.
 func (r Room) playerIDs() []string {
-	players := make([]string, 0, len(r.players))
-	for k := range r.players {
-		players = append(players, k)
+	players := make([]string, len(r.players))
+	for k, p := range r.players {
+		players[p.index] = k
+	}
+
+	return players
+}
+
+// winnerIDs indicate players who have successfully gotten rid
+// of all their cards.
+func (r Room) winnerIDs() []string {
+	players := make([]string, 0)
+	for k, p := range r.players {
+		if len(p.hand) == 0 {
+			players = append(players, k)
+		}
 	}
 
 	return players
@@ -396,7 +410,9 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 			Event:  eventPlayerJoin,
 			Response: &RoomResponse{
 				Players: room.playerIDs(),
+				Escaped: room.winnerIDs(),
 				Max:     room.limit,
+				TurnIdx: room.currentTurn,
 			},
 		})
 	}

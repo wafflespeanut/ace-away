@@ -12,7 +12,9 @@
         <v-col></v-col>
         <v-col :cols="8">
           <v-form v-model="formValid">
-            <v-text-field v-model="player" :rules="nameRules" label="Your name" required></v-text-field>
+            <v-text-field v-model="player"
+                          :rules="nameRules"
+                          label="Your name" required></v-text-field>
             <v-text-field v-model="roomName" :rules="roomRules" label="Room name" required></v-text-field>
             <v-select v-if="!isJoin" v-model="numPlayers" :rules="playersRules" label="No. of players" :items="players" required></v-select>
           </v-form>
@@ -62,14 +64,14 @@ export default class JoinRoom extends JoinRoomProps {
 
   private isJoin: boolean = false;
 
-  private player: string = '';
-
   private nameRules: Array<(v: any) => boolean | string> = [
     (v) => !!v || 'Name is required',
     (v) => (v && v.length >= 3 && v.length <= 10) || 'Name must be 3-10 characters',
   ];
 
   private roomName: string = '';
+
+  private player: string = '';
 
   private get roomRules(): Array<(v: any) => boolean | string> {
     if (!this.isJoin) {
@@ -96,10 +98,7 @@ export default class JoinRoom extends JoinRoomProps {
    */
   private roomCreated() {
     this.loading = true;
-
-    this.conn.onPlayerJoin((resp) => {
-      this.$emit('joined', this.player.toLowerCase(), resp);
-    }, true);
+    this.$emit('player-set', this.player.toLocaleLowerCase());
 
     this.conn.onError((msg, e) => {
       if (e === GameEvent.playerExists || e === GameEvent.roomMissing || e === GameEvent.roomExists) {

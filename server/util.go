@@ -38,7 +38,7 @@ var (
 	suites = [...]string{"d", "c", "h", "s"}
 )
 
-func randomlySortedDeck() []Card {
+func randomDeck() []Card {
 	deck := make([]Card, len(labelRanks)*len(suites))
 	i := 0
 	for _, s := range suites {
@@ -57,7 +57,7 @@ func randomlySortedDeck() []Card {
 
 func randomDeckChunks(numHands uint8) [][]Card {
 	n := int(numHands)
-	deck := randomlySortedDeck()
+	deck := randomDeck()
 	perHand := len(deck) / n
 	extra := len(deck) % n
 

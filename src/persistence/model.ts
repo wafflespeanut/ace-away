@@ -25,6 +25,8 @@ interface TurnRequest {
 interface RoomResponse {
   players: string[];
   max: number;
+  escaped: string[];
+  turnIdx: number;
 }
 
 interface DealResponse {
