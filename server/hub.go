@@ -33,7 +33,7 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 		}
 
 		roomID := strings.TrimSpace(msg.Room)
-		log.Printf("Incoming message (event: %s) from player %s for room %s\n", msg.Event, playerID, roomID)
+		log.Printf("Event %s from player %s for room %s\n", msg.Event, playerID, roomID)
 
 		var responseErr *HandlerError
 
@@ -99,31 +99,41 @@ type GameMessage struct {
 
 // RoomCreationRequest from the client for creating a room.
 type RoomCreationRequest struct {
+	// Number of players to be allowed in that room.
 	Players uint8 `json:"players"`
 }
 
 // TurnRequest for a player's attempt at submitting a card.
 type TurnRequest struct {
+	// Card submitted by the player in some round.
 	Card Card `json:"card"`
 }
 
 // RoomResponse from the server.
 type RoomResponse struct {
+	// IDs of players in the room.
 	Players []string `json:"players"`
 	// When a player takes place of another player who has left the room, it should
 	// be possible to show the winner(s) in the room (if any).
 	Escaped []string `json:"escaped"`
-	Max     uint8    `json:"max"`
-	TurnIdx uint8    `json:"turnIdx"`
+	// Max number of players allowed for this room.
+	Max uint8 `json:"max"`
+	// Index of the player taking the current turn.
+	TurnIdx uint8 `json:"turnIdx"`
 }
 
 // DealResponse from the server when the game begins.
 type DealResponse struct {
-	Table      []PlayerCard `json:"table"`
-	Hand       []Card       `json:"hand"`
-	IsDealer   bool         `json:"isDealer"`
-	TurnPlayer string       `json:"turnPlayer"`
-	OurTurn    bool         `json:"ourTurn"`
+	// Table containing IDs of players and the cards submitted by them for some round.
+	Table []PlayerCard `json:"table"`
+	// Hand of the player getting this response.
+	Hand []Card `json:"hand"`
+	// Whether this player is the dealer for this round.
+	IsDealer bool `json:"isDealer"`
+	// Whether this is the receiving player's turn.
+	OurTurn bool `json:"ourTurn"`
+	// Whose turn is this?
+	TurnPlayer string `json:"turnPlayer"`
 }
 
 // Card from a deck.

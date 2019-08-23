@@ -1,3 +1,4 @@
+/* Server models */
 
 interface ClientMessage<T> {
   player: string;
@@ -88,6 +89,7 @@ enum Label {
   Ace   = 'A',
 }
 
+/** Score map for sorting suites */
 const suiteRanks: any = {
   d: 1,
   c: 10,
@@ -95,6 +97,7 @@ const suiteRanks: any = {
   s: 1000,
 };
 
+/** Score map for sorting labels */
 const labelRanks: any = {
   2:  2,
   3:  3,

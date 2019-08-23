@@ -11,12 +11,18 @@ import (
 // Player represents a player with an active websocket connection.
 // A player can belong to one room at most.
 type Player struct {
-	conn   *websocket.Conn
+	conn *websocket.Conn
+	// ID of the room to which this player belongs.
 	roomID string
-	hand   []Card
+	// Player's hand containing cards.
+	hand []Card
+	// Whether this player is the dealer for some round.
 	dealer bool
-	index  uint8
-	left   bool
+	// Index of this player (i.e., for turns).
+	index uint8
+	// Whether this player has left this room and has been disabled.
+	// If they have, then another player can take their place.
+	left bool
 }
 
 // removeCard from the player's hand (returns `true` if the card gets removed).
@@ -52,10 +58,14 @@ func (p Player) containsSuite(card Card) *Card {
 
 // Room containing some players.
 type Room struct {
-	players     map[string]*Player
+	// Map of player IDs to their meta info.
+	players map[string]*Player
+	// Index of the player taking the current turn.
 	currentTurn uint8
-	limit       uint8
-	table       []PlayerCard
+	// Max number of players allowed in this room.
+	limit uint8
+	// Table containing player IDs and their cards for this round.
+	table []PlayerCard
 }
 
 // forgottenPlayer who has left this room at some point.
@@ -69,6 +79,9 @@ func (r *Room) forgottenPlayer() (string, *Player) {
 	return "", nil
 }
 
+// setDealerForNextRound resets previous dealers, gets the player
+// who has submitted the highest ranked card and marks them as dealer.
+// Also updates the room's `currentTurn` with that player's index.
 func (r *Room) setDealerForNextRound() (string, *Player) {
 	highRank := uint8(0)
 	player := ""
@@ -102,11 +115,11 @@ func (r *Room) nextPlayerWithHand(index uint8) *Player {
 	next := index + 1
 	for {
 		if next == uint8(len(r.players)) {
-			next = 0
+			next = 0 // wrap around
 		}
 
 		if next == index {
-			return nil
+			return nil // no one's there
 		}
 
 		player := r.players[players[next]]
@@ -126,6 +139,8 @@ func (r *Room) addCardToTable(playerID string, player *Player, card Card) bool {
 		Card: card,
 	})
 
+	// If table has reached its limit, then we can set the dealer and
+	// begin the next round.
 	if len(r.table) == int(r.limit) {
 		r.setDealerForNextRound()
 		r.table = make([]PlayerCard, 0)
@@ -227,7 +242,7 @@ func (hub *Hub) startGame(ws *websocket.Conn, room *Room) *HandlerError {
 	}
 
 	for id, p := range room.players {
-		if p.dealer {
+		if p.dealer { // one dealer, so happens only once.
 			return hub.applyPlayerTurn(ws, room, id, p, aceSpade)
 		}
 	}
@@ -270,7 +285,7 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 	return hub.applyPlayerTurn(ws, room, playerID, player, req.Card)
 }
 
-// FIXME: Cleanup before this spreads.
+// FIXME: Cleanup before this infection spreads.
 // applyPlayerTurn (after validation) in the given room using the player and their card.
 func (hub *Hub) applyPlayerTurn(ws *websocket.Conn, room *Room, playerID string, player *Player, card Card) *HandlerError {
 	// Check whether the player has that card and remove it.
@@ -372,6 +387,7 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 			}
 		}
 
+		// This player can take the place of an old player.
 		swapPlayer = oldID
 	}
 

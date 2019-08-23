@@ -38,6 +38,7 @@ var (
 	suites = [...]string{"d", "c", "h", "s"}
 )
 
+// randomDeck contains a shuffled deck of cards.
 func randomDeck() []Card {
 	deck := make([]Card, len(labelRanks)*len(suites))
 	i := 0
@@ -55,6 +56,8 @@ func randomDeck() []Card {
 	return deck
 }
 
+// randomDeckChunks shuffles a deck, distributes the cards for the
+// given number of players and returns the collection.
 func randomDeckChunks(numHands uint8) [][]Card {
 	n := int(numHands)
 	deck := randomDeck()

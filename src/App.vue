@@ -69,10 +69,10 @@
             </v-item-group>
           </v-row>
         </v-row>
-        <v-overlay opacity="0.5" v-if="overlayTip !== null">
+        <v-overlay opacity="0.5" v-if="overlayMsg !== null">
           <div>
-            <span class="display-1">{{ overlayTip }}</span>
-            <v-btn class="mb-4 ml-3" icon color="blue" @click="overlayTip = null">
+            <span class="display-1">{{ overlayMsg }}</span>
+            <v-btn class="mb-4 ml-3" icon color="blue" @click="overlayMsg = null">
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </div>
@@ -96,6 +96,7 @@ import JoinRoom from './dialog/JoinRoom.vue';
 import { Card, Suite, suitePrettyMap, Label, PlayerCard, GameEvent, suiteRanks, labelRanks } from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
+import GameEventHub from './persistence';
 
 const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 const START_ANGLE = Math.PI / 2;
@@ -116,28 +117,66 @@ export default class App extends Vue {
 
   /* Constants used by models */
 
+  /**
+   * Allowed choices for players in rooms.
+   */
   private allowedPlayers: number[] = ALLOWED_PLAYERS;
 
+  /**
+   * Object for mapping suites to their unicode representations.
+   */
   private prettyMap: any = suitePrettyMap;
 
   /* Models */
 
+  /**
+   * Player ID set by the user (after creating/joining a room).
+   */
+  private playerID: string = '';
+
+  /**
+   * Name of the room joined by the user (set after creating/joining a room).
+   */
   private roomJoined: string | null = null;
 
+  /**
+   * Notifications from the server shown as a snackbar at the bottom.
+   */
   private notification: string | null = null;
 
+  /**
+   * Alert message shown in app bar.
+   */
   private alertMsg: string | null = null;
 
+  /**
+   * Type of the alert.
+   */
   private alertType: string = 'info';
 
-  private overlayTip: string | null = null;
+  /**
+   * Message shown in overlay.
+   */
+  private overlayMsg: string | null = null;
 
+  /**
+   * Index of the card selected by the user.
+   */
   private cardIndex: number | null = null;
 
+  /**
+   * Player's hand containing their cards sorted by their labels and suites.
+   */
   private hand: Card[] = [];
 
+  /**
+   * Table containing the cards from all players for that round.
+   */
   private table: TableItem[] = [];
 
+  /**
+   * Size of the card based on viewports.
+   */
   private get cardSize(): number {
     if (screen.width <= 600) {
       return 85;
@@ -148,6 +187,9 @@ export default class App extends Vue {
     }
   }
 
+  /**
+   * Size of the table based on viewports.
+   */
   private get tableSize(): number {
     if (screen.width <= 600) {
       return 300;
@@ -160,10 +202,11 @@ export default class App extends Vue {
 
   /* Internal properties */
 
-  private playerID: string = '';
+  private conn: GameEventHub = new ConnectionProvider();
 
-  private conn = new ConnectionProvider();
-
+  /**
+   * Stypes applied to the cards within the table.
+   */
   private tableCardStyles(idx: number): object {
     const total = this.table.length ? this.table.length : 1;
     const angle = 2 * Math.PI / total;
@@ -182,6 +225,7 @@ export default class App extends Vue {
     this.conn.onError(this.showError, true);
 
     this.conn.onPlayerJoin((resp) => {
+      // Set player states.
       this.table = resp.response.players.map((id, i) => {
         return {
           id,
@@ -195,6 +239,7 @@ export default class App extends Vue {
         this.roomJoined = resp.room;
       }
 
+      // Notify if we're waiting on player(s) joining.
       const diff = resp.response.max - resp.response.players.length;
       if (diff > 0) {
         this.alertMsg = `Waiting for ${diff} more player(s) in room ${resp.room}.`;
@@ -208,16 +253,19 @@ export default class App extends Vue {
     }, true);
 
     this.conn.onPlayerTurn((resp) => {
+      // Sort the hand based on suites followed by labels.
       this.hand = resp.response.hand.sort((c1, c2) => {
         return suiteRanks[c1.suite] * labelRanks[c1.label] - suiteRanks[c2.suite] * labelRanks[c2.label];
       });
 
+      // Reset states of cards in our table.
       this.table.forEach((v) => {
         v.won = false;
         v.card = null;
         v.turn = v.id === resp.response.turnPlayer;
       });
 
+      // Get the cards and set them in our table.
       resp.response.table.forEach((c) => {
         const idx = this.table.findIndex((v) => v.id === c.id); // This will exist.
         this.table[idx].card = c.card;
@@ -227,14 +275,25 @@ export default class App extends Vue {
     this.conn.onPlayerWin((resp) => {
       const idx = this.table.findIndex((i) => i.id === resp.player);
       this.table[idx].won = true;
-      this.overlayTip = `${resp.player} escapes.`;
+      if (this.playerID === resp.player) {
+        this.overlayMsg = `Congrats! You've escaped!`;
+      } else {
+        this.overlayMsg = `${resp.player} escapes.`;
+      }
     });
 
     this.conn.onGameOver((resp) => {
-      this.overlayTip = `${resp.player} has leftover card(s) and loses.`;
+      if (this.playerID === resp.player) {
+        this.overlayMsg = `You've got leftover cards. You lose.`;
+      } else {
+        this.overlayMsg = `${resp.player} has leftover card(s) and loses.`;
+      }
     });
   }
 
+  /**
+   * Sends the user-selected card to the pile of cards in the table.
+   */
   private sendToPile() {
     this.conn.showCard({
       player: this.playerID,
@@ -248,6 +307,9 @@ export default class App extends Vue {
     this.cardIndex = null;
   }
 
+  /**
+   * Set snackbar message.
+   */
   private showError(msg: string) {
     this.notification = msg;
   }

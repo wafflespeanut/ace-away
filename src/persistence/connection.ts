@@ -10,6 +10,12 @@ interface Callback<F> {
   callback: F;
 }
 
+/**
+ * Provides a wrapper for `Websocket` object and exposes the messaging interface.
+ *
+ * This uses statics and is global for the app i.e., only one websocket is created
+ * and used throughout the app. Same applies to added event listeners.
+ */
 export default class ConnectionProvider implements GameEventHub {
 
   private static conn: WebSocket | null = null;
@@ -17,6 +23,8 @@ export default class ConnectionProvider implements GameEventHub {
   private static callbacks: { [key in GameEvent]?: Array<Callback<(resp: any) => void>> } = {};
 
   private static errorCallbacks: Array<Callback<(msg: string, event: GameEvent) => void>> = [];
+
+  /* Interface methods */
 
   public createRoom(req: ClientMessage<RoomCreationRequest>) {
     this.sendMessage(req);
@@ -53,6 +61,13 @@ export default class ConnectionProvider implements GameEventHub {
     });
   }
 
+  /**
+   * Generic event listener for all game events.
+   *
+   * @param event Game event.
+   * @param callback Callback to be called with server response.
+   * @param persist Whether to persist that callback or destroy it after the first call.
+   */
   private onEvent<R>(event: GameEvent, callback: (resp: ServerMessage<R>) => void, persist?: boolean) {
     if (ConnectionProvider.callbacks[event] === undefined) {
       ConnectionProvider.callbacks[event] = [];
@@ -64,6 +79,11 @@ export default class ConnectionProvider implements GameEventHub {
     });
   }
 
+  /**
+   * Generic message listener for an open websocket.
+   *
+   * @param event Websocket message event.
+   */
   private onMessage(event: MessageEvent) {
     const data: ServerMessage<any> = JSON.parse(event.data);
     console.debug('Incoming message', data);
@@ -85,12 +105,21 @@ export default class ConnectionProvider implements GameEventHub {
     }
   }
 
+  /**
+   * Generic sender for messages.
+   *
+   * @param msg JSON object.
+   */
   private sendMessage<T>(msg: T) {
     this.withConnection((ws) => {
       ws.send(JSON.stringify(msg));
     });
   }
 
+  /**
+   * Provides the `WebSocket` object to the caller through a callback.
+   * Instantiates or reuses the websocket as required.
+   */
   private withConnection(callback: (ws: WebSocket) => void) {
     if (ConnectionProvider.conn) {
       return callback(ConnectionProvider.conn);
