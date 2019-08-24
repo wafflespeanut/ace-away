@@ -13,7 +13,10 @@
       <v-container fluid>
         <v-row class="my-5"></v-row>
         <v-row class="d-flex flex-column flex-md-row">
-          <v-row v-if="table.length" class="mx-8 mb-10">
+          <v-row v-if="table.length" :class="{
+            'mx-10': $vuetify.breakpoint.mdAndUp,
+            'mb-10': true,
+          }">
             <v-card :width="tableSize" :height="tableSize" class="mx-auto my-auto"
                     :style="{ borderRadius: '50%' }">
               <v-card :style="tableCardStyles(i)"
@@ -30,44 +33,52 @@
               </v-card>
             </v-card>
           </v-row>
-          <v-row class="d-flex justify-center align-center mt-5 mb-10">
+          <v-row :style="{
+            'flex-grow': $vuetify.breakpoint.mdAndUp ? '0' : '1',
+          }" class="d-flex justify-center align-center mt-5 mb-5">
             <v-tooltip bottom v-if="hand.length">
               <template v-slot:activator="{ on }">
                 <v-fab-transition>
-                  <v-btn icon
-                        fab
-                        color="red"
-                        :disabled="cardIndex === null"
-                        v-on="on"
-                        @click="sendToPile">
-                    <v-icon class='display-3'>mdi-fire</v-icon>
+                  <v-btn fab icon
+                         :width="$vuetify.breakpoint.xs ? 80 : 100"
+                         :height="$vuetify.breakpoint.xs ? 80 : 100"
+                         color="red"
+                         :disabled="cardIndex === null"
+                         @mouseover="on"
+                         @click="sendToPile">
+                    <v-icon :class="{
+                      'display-3': $vuetify.breakpoint.xs,
+                      'display-4': $vuetify.breakpoint.smAndUp,
+                    }">mdi-fire</v-icon>
                   </v-btn>
                 </v-fab-transition>
               </template>
               <span>Add your card to the pile</span>
             </v-tooltip>
           </v-row>
-          <v-row class="mx-8 my-auto">
-            <!-- We're gating "mandatory" because we don't need a card selected by default. -->
+          <v-col :cols="$vuetify.breakpoint.mdAndUp ? '5' : 'auto'" :class="{
+            'mx-5': $vuetify.breakpoint.xs,
+            'mx-10': $vuetify.breakpoint.smAndUp,
+            'my-auto': true,
+          }">
+            <!-- We're "conditionally mandating" because we don't need a card selected all the time. -->
             <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
-              <v-row v-for="(icon, suite, x) in prettyMap" :key="x">
-                <!-- Filtering here doesn't affect `cardIndex` because we've already sorted the hand. -->
-                <v-col>
-                  <v-row>
-                    <v-item v-for="(card, i) in hand.filter((c) => c.suite === suite)" :key="i" v-slot:default="{ active, toggle }">
-                      <v-card :color="active ? ( suite == 'h' || suite == 'd' ? 'red' : 'blue' ) : ''"
-                              @click="toggle"
-                              :height="cardSize"
-                              :width="cardSize"
-                              class="d-flex justify-center align-center">
-                        <span class="display-1">{{ card.label }} {{ icon }}</span>
-                      </v-card>
-                    </v-item>
-                  </v-row>
-                </v-col>
+              <v-row class="d-flex my-4" v-for="(icon, suite, x) in prettyMap" :key="x">
+                <v-item v-for="(card, i) in hand.filter((c) => c.suite === suite)" :key="i"
+                        v-slot:default="{ active, toggle }">
+                  <v-slide-x-transition>
+                    <v-card :color="active ? ( suite == 'h' || suite == 'd' ? 'red' : 'blue' ) : ''"
+                            @click="() => { selectedCard = card; toggle(); }"
+                            :height="cardSize"
+                            :width="cardSize"
+                            class="d-flex justify-center align-center">
+                      <span class="display-1">{{ card.label }} {{ icon }}</span>
+                    </v-card>
+                  </v-slide-x-transition>
+                </v-item>
               </v-row>
             </v-item-group>
-          </v-row>
+          </v-col>
         </v-row>
         <v-overlay opacity="0.5" v-if="overlayMsg !== null">
           <div>
@@ -117,66 +128,45 @@ export default class App extends Vue {
 
   /* Constants used by models */
 
-  /**
-   * Allowed choices for players in rooms.
-   */
+  /** Allowed choices for players in rooms. */
   private allowedPlayers: number[] = ALLOWED_PLAYERS;
 
-  /**
-   * Object for mapping suites to their unicode representations.
-   */
+  /** Object for mapping suites to their unicode representations. */
   private prettyMap: any = suitePrettyMap;
 
   /* Models */
 
-  /**
-   * Player ID set by the user (after creating/joining a room).
-   */
+  /** Name set by the player (after creating/joining a room). */
   private playerID: string = '';
 
-  /**
-   * Name of the room joined by the user (set after creating/joining a room).
-   */
+  /** Name of the room joined by the player (set after creating/joining a room). */
   private roomJoined: string | null = null;
 
-  /**
-   * Notifications from the server shown as a snackbar at the bottom.
-   */
+  /** Notifications from the server shown as a snackbar at the bottom. */
   private notification: string | null = null;
 
-  /**
-   * Alert message shown in app bar.
-   */
+  /** Alert message shown in app bar. */
   private alertMsg: string | null = null;
 
-  /**
-   * Type of the alert.
-   */
+  /** Type of the alert. */
   private alertType: string = 'info';
 
-  /**
-   * Message shown in overlay.
-   */
+  /** Message shown in overlay. */
   private overlayMsg: string | null = null;
 
-  /**
-   * Index of the card selected by the user.
-   */
+  /** Card selected by the player. */
+  private selectedCard: Card | null = null;
+
+  /** Index of `selectedCard`. **Only used for resetting selection. Don't use this directly.** */
   private cardIndex: number | null = null;
 
-  /**
-   * Player's hand containing their cards sorted by their labels and suites.
-   */
+  /** Player's hand containing their cards sorted by their labels and suites. */
   private hand: Card[] = [];
 
-  /**
-   * Table containing the cards from all players for that round.
-   */
+  /** Table containing the cards from all players for that round. */
   private table: TableItem[] = [];
 
-  /**
-   * Size of the card based on viewports.
-   */
+  /** Size of the card based on viewports. */
   private get cardSize(): number {
     if (screen.width <= 600) {
       return 85;
@@ -187,9 +177,7 @@ export default class App extends Vue {
     }
   }
 
-  /**
-   * Size of the table based on viewports.
-   */
+  /** Size of the table based on viewports. */
   private get tableSize(): number {
     if (screen.width <= 600) {
       return 300;
@@ -204,9 +192,7 @@ export default class App extends Vue {
 
   private conn: GameEventHub = new ConnectionProvider();
 
-  /**
-   * Stypes applied to the cards within the table.
-   */
+  /** Stypes applied to the cards within the table. */
   private tableCardStyles(idx: number): object {
     const total = this.table.length ? this.table.length : 1;
     const angle = 2 * Math.PI / total;
@@ -291,28 +277,33 @@ export default class App extends Vue {
     });
   }
 
-  /**
-   * Sends the user-selected card to the pile of cards in the table.
-   */
+  /** Sends the player-selected card to the pile of cards in the table. */
   private sendToPile() {
+    console.log(`Player placing ${this.selectedCard}`);
     this.conn.showCard({
       player: this.playerID,
       room: this.roomJoined!,
       event: GameEvent.playerTurn,
       data: {
-        card: this.hand[this.cardIndex!],
+        card: this.selectedCard!,
       },
     });
 
     this.cardIndex = null;
   }
 
-  /**
-   * Set snackbar message.
-   */
+  /** Sets the snackbar message. */
   private showError(msg: string) {
     this.notification = msg;
   }
 }
 export { ALLOWED_PLAYERS };
 </script>
+
+<style scoped>
+* {
+  transition: all 500ms ease;
+}
+
+
+</style>

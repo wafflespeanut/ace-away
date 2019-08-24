@@ -20,6 +20,13 @@ var (
 		Suite: "s",
 	}
 
+	prettyMap = map[string]string{
+		"d": "♦",
+		"c": "♣",
+		"h": "♥",
+		"s": "♠",
+	}
+
 	labelRanks = map[string]uint8{
 		"2":  2,
 		"3":  3,
@@ -35,6 +42,7 @@ var (
 		"K":  13,
 		"A":  14,
 	}
+
 	suites = [...]string{"d", "c", "h", "s"}
 )
 

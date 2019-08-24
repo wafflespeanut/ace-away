@@ -51,28 +51,37 @@ const JoinRoomProps = Vue.extend({
   components: {},
 })
 export default class JoinRoom extends JoinRoomProps {
-
+  /**
+   * Headline for the modal.
+   */
   private get headline(): string {
     return this.isJoin ? 'Join' : 'Create';
   }
 
+  /** Subtitle for the modal. */
   private get dialogText(): string {
     return this.isJoin ? 'Join an existing room.' : 'Create a new room for playing.';
   }
 
+  /** Whether player input for this dialog is valid. */
   private formValid: boolean = false;
 
+  /** Whether the player is trying to join a room rather than creating one. */
   private isJoin: boolean = false;
 
+  /** Validation rules for player name. */
   private nameRules: Array<(v: any) => boolean | string> = [
     (v) => !!v || 'Name is required',
     (v) => (v && v.length >= 3 && v.length <= 10) || 'Name must be 3-10 characters',
   ];
 
+  /** Room name. */
   private roomName: string = '';
 
+  /** Player ID. */
   private player: string = '';
 
+  /** Validation rules for room name. */
   private get roomRules(): Array<(v: any) => boolean | string> {
     if (!this.isJoin) {
       return [];
@@ -83,12 +92,15 @@ export default class JoinRoom extends JoinRoomProps {
     ];
   }
 
+  /** Number of players allowed in this room (for creation). */
   private numPlayers: number | null = null;
 
+  /** Validation rules for player count. */
   private playersRules: Array<(v: any) => boolean | string> = [
     (v) => !!v || 'Player count is required',
   ];
 
+  /** Loading of dialog button. */
   private loading: boolean = false;
 
   private conn = new ConnectionProvider();
@@ -98,6 +110,7 @@ export default class JoinRoom extends JoinRoomProps {
    */
   private roomCreated() {
     this.loading = true;
+    // Emit an event to the parent with the room name.
     this.$emit('player-set', this.player.toLocaleLowerCase());
 
     this.conn.onError((msg, e) => {

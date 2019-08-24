@@ -319,7 +319,7 @@ func (hub *Hub) applyPlayerTurn(ws *websocket.Conn, room *Room, playerID string,
 			player.hand = append(player.hand, card)
 			return &HandlerError{
 				Msg: fmt.Sprintf("Illegal move. You have %s%s which matches the suite in table.",
-					matchedCard.Label, matchedCard.Suite),
+					matchedCard.Label, prettyMap[matchedCard.Suite]),
 			}
 		}
 
