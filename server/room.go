@@ -100,6 +100,8 @@ func (r *Room) setDealerForNextRound() (string, *Player) {
 
 	newDealer := r.players[player]
 	newDealer.dealer = true
+	// log.Printf("New dealer: %s (index: %d, old index: %d)\n",
+	// 	player, newDealer.index, r.currentTurn)
 	r.currentTurn = newDealer.index
 	return player, newDealer
 }
@@ -124,6 +126,7 @@ func (r *Room) nextPlayerWithHand(index uint8) *Player {
 
 		player := r.players[players[next]]
 		if len(player.hand) > 0 {
+			// log.Printf("Next player with hand: %s (index: %d)\n", players[next], player.index)
 			return player
 		}
 
@@ -142,6 +145,7 @@ func (r *Room) addCardToTable(playerID string, player *Player, card Card) bool {
 	// If table has reached its limit, then we can set the dealer and
 	// begin the next round.
 	if len(r.table) == int(r.limit) {
+		// log.Println("Table reached limit. Setting dealer for next round.")
 		r.setDealerForNextRound()
 		r.table = make([]PlayerCard, 0)
 		return true
@@ -152,6 +156,7 @@ func (r *Room) addCardToTable(playerID string, player *Player, card Card) bool {
 		return false
 	}
 
+	// log.Printf("Switching to player %d\n", nextPlayer.index+1)
 	r.currentTurn = nextPlayer.index
 	return true
 }
@@ -234,6 +239,7 @@ func (hub *Hub) startGame(ws *websocket.Conn, room *Room) *HandlerError {
 		for _, card := range p.hand {
 			if card.Label == aceSpade.Label && card.Suite == aceSpade.Suite {
 				p.dealer = true
+				room.currentTurn = p.index
 				break
 			}
 		}
@@ -241,12 +247,7 @@ func (hub *Hub) startGame(ws *websocket.Conn, room *Room) *HandlerError {
 		playerIdx++
 	}
 
-	for id, p := range room.players {
-		if p.dealer { // one dealer, so happens only once.
-			return hub.applyPlayerTurn(ws, room, id, p, aceSpade)
-		}
-	}
-
+	room.dealConnectedPlayers(ws)
 	return nil
 }
 
@@ -282,57 +283,9 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 		}
 	}
 
-	return hub.applyPlayerTurn(ws, room, playerID, player, req.Card)
-}
-
-// FIXME: Cleanup before this infection spreads.
-// applyPlayerTurn (after validation) in the given room using the player and their card.
-func (hub *Hub) applyPlayerTurn(ws *websocket.Conn, room *Room, playerID string, player *Player, card Card) *HandlerError {
-	// Check whether the player has that card and remove it.
-	if !player.removeCard(card) {
-		return &HandlerError{
-			Msg: "You don't have that card.",
-		}
-	}
-
-	var gameEnds bool
-
-	// If player has that card, then it's automatically valid. Let's rank stuff.
-	if len(room.table) == 0 {
-		// Table is empty. If the player isn't the dealer, reject the request.
-		if !player.dealer {
-			player.hand = append(player.hand, card)
-			return &HandlerError{
-				Msg: "Only dealers are allowed to start a round.",
-			}
-		}
-
-		gameEnds = !room.addCardToTable(playerID, player, card)
-	} else if room.matchesSuite(card) {
-		// Card matches the suites in table.
-		gameEnds = !room.addCardToTable(playerID, player, card)
-	} else {
-		// No match! If the player has that suite and is making an illegal move,
-		// reject that request.
-		matchedCard := player.containsSuite(room.table[0].Card)
-		if matchedCard != nil {
-			player.hand = append(player.hand, card)
-			return &HandlerError{
-				Msg: fmt.Sprintf("Illegal move. You have %s%s which matches the suite in table.",
-					matchedCard.Label, prettyMap[matchedCard.Suite]),
-			}
-		}
-
-		// Player who had the highest rank gets all the junk
-		// and becomes the dealer.
-		_, newDealer := room.setDealerForNextRound()
-		newDealer.hand = append(newDealer.hand, card)
-		for _, c := range room.table {
-			newDealer.hand = append(newDealer.hand, c.Card)
-		}
-
-		room.table = make([]PlayerCard, 0)
-		gameEnds = room.nextPlayerWithHand(newDealer.index) == nil
+	gameEnds, e := hub.applyPlayerTurn(room, playerID, req.Card)
+	if e != nil {
+		return e
 	}
 
 	room.dealConnectedPlayers(ws)
@@ -366,6 +319,59 @@ func (hub *Hub) applyPlayerTurn(ws *websocket.Conn, room *Room, playerID string,
 	}
 
 	return nil
+}
+
+// applyPlayerTurn (after validation) in the given room using the player and their card.
+func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (bool, *HandlerError) {
+	player := room.players[playerID]
+	// Check whether the player has that card and remove it.
+	if !player.removeCard(card) {
+		return false, &HandlerError{
+			Msg: "You don't have that card.",
+		}
+	}
+
+	var gameEnds bool
+
+	// If player has that card, then it's automatically valid. Let's rank stuff.
+	if len(room.table) == 0 {
+		// Table is empty. If the player isn't the dealer, reject the request.
+		if !player.dealer {
+			player.hand = append(player.hand, card)
+			return false, &HandlerError{
+				Msg: "Only dealers are allowed to start a round.",
+			}
+		}
+
+		gameEnds = !room.addCardToTable(playerID, player, card)
+	} else if room.matchesSuite(card) {
+		// Card matches the suites in table.
+		gameEnds = !room.addCardToTable(playerID, player, card)
+	} else {
+		// No match! If the player has that suite and is making an illegal move,
+		// reject that request.
+		matchedCard := player.containsSuite(room.table[0].Card)
+		if matchedCard != nil {
+			player.hand = append(player.hand, card)
+			return false, &HandlerError{
+				Msg: fmt.Sprintf("Illegal move. You have %s%s which matches the suite in table.",
+					matchedCard.Label, prettyMap[matchedCard.Suite]),
+			}
+		}
+
+		// Player who had the highest rank gets all the junk
+		// and becomes the dealer.
+		_, newDealer := room.setDealerForNextRound()
+		newDealer.hand = append(newDealer.hand, card)
+		for _, c := range room.table {
+			newDealer.hand = append(newDealer.hand, c.Card)
+		}
+
+		room.table = make([]PlayerCard, 0)
+		gameEnds = room.nextPlayerWithHand(newDealer.index) == nil
+	}
+
+	return gameEnds, nil
 }
 
 // Adds player to a room. The room must exist at this point. Also does some sanity

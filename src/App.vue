@@ -44,7 +44,7 @@
                          :height="$vuetify.breakpoint.xs ? 80 : 100"
                          color="red"
                          :disabled="cardIndex === null"
-                         @mouseover="on"
+                         v-on="$vuetify.breakpoint.smAndUp ? on : () => {}"
                          @click="sendToPile">
                     <v-icon :class="{
                       'display-3': $vuetify.breakpoint.xs,
@@ -279,7 +279,7 @@ export default class App extends Vue {
 
   /** Sends the player-selected card to the pile of cards in the table. */
   private sendToPile() {
-    console.log(`Player placing ${this.selectedCard}`);
+    console.log(`Player placing ${this.selectedCard!.label}${this.prettyMap[this.selectedCard!.suite]}`);
     this.conn.showCard({
       player: this.playerID,
       room: this.roomJoined!,

@@ -86,7 +86,7 @@ export default class ConnectionProvider implements GameEventHub {
    */
   private onMessage(event: MessageEvent) {
     const data: ServerMessage<any> = JSON.parse(event.data);
-    console.debug('Incoming message', data);
+    console.debug('Incoming message', JSON.stringify(data));
     const callbacks = ConnectionProvider.callbacks[data.event];
     if (callbacks) {
       callbacks.forEach((c) => {
