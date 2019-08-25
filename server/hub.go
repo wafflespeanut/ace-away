@@ -14,6 +14,116 @@ type Hub struct {
 	rooms map[string]*Room
 	// Map of WS connections to room IDs.
 	connRooms map[*websocket.Conn]string
+	// Hub command channel.
+	cmdChan chan hubCommand
+	// Channel for room pointers from hub.
+	roomChan chan *Room
+	// Channel for IDs from hub.
+	connChan chan string
+	// Ack channel for other operations.
+	ackChan chan bool
+}
+
+type hubCmdType int
+
+const (
+	cmdSetRoom = iota
+	cmdGetRoom
+	cmdDeleteRoom
+	cmdSetConnection
+	cmdDeleteConnection
+)
+
+// Command sent for requesting/updating stuff in the hub.
+type hubCommand struct {
+	// Type of the command (mandatory).
+	ty     hubCmdType
+	roomID string
+	room   *Room
+	ws     *websocket.Conn
+}
+
+/* Map-like methods specific to our types. */
+
+// getRoom corresponding to the given room ID.
+func (hub *Hub) getRoom(roomID string) (*Room, bool) {
+	hub.cmdChan <- hubCommand{
+		ty:     cmdGetRoom,
+		roomID: roomID,
+	}
+
+	room := <-hub.roomChan
+	return room, room != nil
+}
+
+// setRoom for the given ID.
+func (hub *Hub) setRoom(roomID string, room *Room) {
+	hub.cmdChan <- hubCommand{
+		ty:     cmdSetRoom,
+		roomID: roomID,
+		room:   room,
+	}
+	_ = <-hub.ackChan
+}
+
+// deleteRoom corresponding to the given room ID.
+func (hub *Hub) deleteRoom(roomID string) {
+	hub.cmdChan <- hubCommand{
+		ty:     cmdDeleteRoom,
+		roomID: roomID,
+	}
+	_ = <-hub.ackChan
+}
+
+// setConnection to the given room ID.
+func (hub *Hub) setConnection(ws *websocket.Conn, roomID string) {
+	hub.cmdChan <- hubCommand{
+		ty:     cmdSetConnection,
+		roomID: roomID,
+		ws:     ws,
+	}
+	_ = <-hub.ackChan
+}
+
+// deleteConnection and return its room ID (if any).
+func (hub *Hub) deleteConnection(ws *websocket.Conn) (string, bool) {
+	hub.cmdChan <- hubCommand{
+		ty: cmdDeleteConnection,
+		ws: ws,
+	}
+	id := <-hub.connChan
+	return id, id != ""
+}
+
+// handleCommands for this hub.
+//
+// **NOTE:** This must be launched into a separate goroutine.
+func (hub *Hub) handleCommands() {
+	for {
+		cmd := <-hub.cmdChan
+		if cmd.ty == cmdGetRoom {
+			room := hub.rooms[cmd.roomID]
+			hub.roomChan <- room
+		} else if cmd.ty == cmdSetRoom {
+			hub.rooms[cmd.roomID] = cmd.room
+			hub.ackChan <- true
+		} else if cmd.ty == cmdDeleteRoom {
+			_, exists := hub.rooms[cmd.roomID]
+			delete(hub.rooms, cmd.roomID)
+			hub.ackChan <- exists
+		} else if cmd.ty == cmdSetConnection {
+			hub.connRooms[cmd.ws] = cmd.roomID
+			hub.ackChan <- true
+		} else if cmd.ty == cmdDeleteConnection {
+			roomID, exists := hub.connRooms[cmd.ws]
+			if !exists {
+				roomID = ""
+			}
+
+			delete(hub.connRooms, cmd.ws)
+			hub.connChan <- roomID
+		}
+	}
 }
 
 // Serve an incoming websocket connection.
@@ -22,7 +132,7 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 	for {
 		var msg GameMessage
 		if err := websocket.JSON.Receive(ws, &msg); err != nil {
-			hub.dropConn(ws, playerID)
+			hub.dropPlayer(ws, playerID)
 			break
 		}
 
@@ -55,17 +165,18 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 }
 
 // Cleanup and drop a connection.
-func (hub *Hub) dropConn(ws *websocket.Conn, playerID string) {
+func (hub *Hub) dropPlayer(ws *websocket.Conn, playerID string) {
 	log.Printf("Dropping connection for player %s\n", playerID)
-	roomID, exists := hub.connRooms[ws]
-	if exists {
-		delete(hub.connRooms, ws)
-	} else {
+	roomID, exists := hub.deleteConnection(ws)
+	if !exists {
 		return
 	}
 
-	room := hub.rooms[roomID]
+	room, _ := hub.getRoom(roomID)
 	log.Printf("Disabling player %s in room %s\n", playerID, roomID)
+	room.lock.Lock()
+	defer room.lock.Unlock()
+
 	room.players[playerID].left = true
 
 	allLeft := true
@@ -75,7 +186,7 @@ func (hub *Hub) dropConn(ws *websocket.Conn, playerID string) {
 
 	if allLeft {
 		log.Printf("All players have left. Removing room %s\n", roomID)
-		delete(hub.rooms, roomID)
+		hub.deleteRoom(roomID)
 	}
 }
 

@@ -45,7 +45,12 @@ func main() {
 	hub := &Hub{
 		rooms:     make(map[string]*Room),
 		connRooms: make(map[*websocket.Conn]string),
+		cmdChan:   make(chan hubCommand),
+		roomChan:  make(chan *Room),
+		connChan:  make(chan string),
+		ackChan:   make(chan bool),
 	}
+	go hub.handleCommands()
 
 	if *pathPtr == "" {
 		flag.PrintDefaults()
