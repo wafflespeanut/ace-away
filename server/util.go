@@ -81,7 +81,9 @@ func randomDeckChunks(numHands uint8) [][]Card {
 		}
 
 		end := start + size
-		hands[i] = deck[start:end]
+		deckSlice := deck[start:end]
+		hands[i] = make([]Card, len(deckSlice))
+		copy(hands[i], deckSlice) // copy so that we don't affect the i+1'th slice on appending.
 		start += size
 	}
 

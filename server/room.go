@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/davecgh/go-spew/spew"
 	"golang.org/x/net/websocket"
 )
 
@@ -24,6 +25,12 @@ type Player struct {
 	// Whether this player has left this room and has been disabled.
 	// If they have, then another player can take their place.
 	left bool
+}
+
+// debugString for `Player`
+func (p *Player) debugString() string {
+	return spew.Sprintf("Room ID: %+v\nHand: %+v\nisDealer: %+v\nindex: %+v\nhasLeft: %+v\n",
+		p.roomID, p.hand, p.dealer, p.index, p.left)
 }
 
 // removeCard from the player's hand (returns `true` if the card gets removed).
@@ -69,6 +76,31 @@ type Room struct {
 	limit uint8
 	// Table containing player IDs and their cards for this round.
 	table []PlayerCard
+}
+
+// `debugString` for `Room`.
+func (r *Room) debugString() string {
+	s := "Players:\n"
+	for id, p := range r.players {
+		s += spew.Sprintf("%#+v: %s\n", id, p.debugString())
+	}
+
+	s += spew.Sprintf("Current turn: %+v\nLimit: %+v\nTable: %+v\n",
+		r.currentTurn, r.limit, r.table)
+	return s
+}
+
+// tableReachedLimit returns whether the table has cards from all players
+// with cards in their hands, indicating the end of a round.
+func (r *Room) tableReachedLimit() bool {
+	l := len(r.table)
+	for _, p := range r.players {
+		if len(p.hand) > 0 {
+			l--
+		}
+	}
+
+	return l == 0
 }
 
 // forgottenPlayer who has left this room at some point.
@@ -147,7 +179,7 @@ func (r *Room) addCardToTable(playerID string, player *Player, card Card) bool {
 
 	// If table has reached its limit, then we can set the dealer and
 	// begin the next round.
-	if len(r.table) == int(r.limit) {
+	if r.tableReachedLimit() {
 		// log.Println("Table reached limit. Setting dealer for next round.")
 		r.setDealerForNextRound()
 		r.table = make([]PlayerCard, 0)
@@ -308,6 +340,7 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 //
 // **NOTE:** The caller is responsible for synchronizing access to room pointer.
 func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (bool, *HandlerError) {
+	// log.Printf("Before update: %s", room.debugString())
 	player := room.players[playerID]
 	// Check whether the player has that card and remove it.
 	if !player.removeCard(card) {
@@ -347,6 +380,7 @@ func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (bool, *
 		// Player who had the highest rank gets all the junk
 		// and becomes the dealer.
 		_, newDealer := room.setDealerForNextRound()
+		// log.Printf("New dealer: %s -> %s", dealerID, newDealer.debugString())
 		newDealer.hand = append(newDealer.hand, card)
 		for _, c := range room.table {
 			newDealer.hand = append(newDealer.hand, c.Card)
@@ -356,6 +390,7 @@ func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (bool, *
 		gameEnds = room.nextPlayerWithHand(newDealer.index) == nil
 	}
 
+	// log.Printf("After update: %s", room.debugString())
 	return gameEnds, nil
 }
 
@@ -390,7 +425,7 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *H
 	hub.setConnection(ws, roomID)
 
 	_, exists = room.players[playerID]
-	if exists {
+	if exists && swapPlayer == "" {
 		return &HandlerError{
 			Msg:   fmt.Sprintf("Player %s already exists in room %s. Choose a different name.", playerID, roomID),
 			Event: eventPlayerExists,
