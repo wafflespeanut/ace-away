@@ -130,7 +130,12 @@ export default class ConnectionProvider implements GameEventHub {
       protocol = 'ws';
     }
 
-    const url = `${protocol}://${window.location.host}/ws`;
+    let url = `${protocol}://${window.location.host}${window.location.pathname}`;
+    if (!url.endsWith('/')) {
+      url += '/';
+    }
+    url += 'ws';
+
     const socket = new WebSocket(url);
     socket.onopen = () => {
       ConnectionProvider.conn = socket;
