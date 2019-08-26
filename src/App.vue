@@ -19,18 +19,20 @@
           }">
             <v-card :width="tableSize" :height="tableSize" class="mx-auto my-auto"
                     :style="{ borderRadius: '50%' }">
-              <v-card :style="tableCardStyles(i)"
-                      class="d-flex flex-column align-center justify-center"
-                      v-for="(item, i) in table" :key="i"
-                      :height="0.9 * cardSize" :width="0.9 * cardSize"
-                      :elevation="item.turn ? 8 : 2"
-                      :color="item.won ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
-                <div v-if="item.won">[no cards]</div>
-                <div v-else-if="item.turn">???</div>
-                <div v-else-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
-                <div v-else>-</div>
-                <div class="caption">{{ item.id }}</div>
-              </v-card>
+              <transition-group name="fade">
+                <v-card :style="tableCardStyles(i)"
+                        class="d-flex flex-column align-center justify-center"
+                        v-for="(item, i) in table" :key="i"
+                        :height="0.9 * cardSize" :width="0.9 * cardSize"
+                        :elevation="item.turn ? 8 : 2"
+                        :color="item.won ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
+                  <div v-if="item.won">[no cards]</div>
+                  <div v-else-if="item.turn">???</div>
+                  <div v-else-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
+                  <div v-else>-</div>
+                  <div class="caption">{{ item.id }}</div>
+                </v-card>
+              </transition-group>
             </v-card>
           </v-row>
           <v-row :style="{
@@ -42,14 +44,14 @@
                   <v-btn fab icon
                          :width="$vuetify.breakpoint.xs ? 80 : 100"
                          :height="$vuetify.breakpoint.xs ? 80 : 100"
-                         color="red"
+                         :color="selectedCard ? (selectedCard.suite === 'h' || selectedCard.suite === 'd') ? 'red' : 'blue' : ''"
                          :disabled="cardIndex === null"
                          v-on="$vuetify.breakpoint.smAndUp ? on : () => {}"
                          @click="sendToPile">
                     <v-icon :class="{
                       'display-3': $vuetify.breakpoint.xs,
                       'display-4': $vuetify.breakpoint.smAndUp,
-                    }">mdi-fire</v-icon>
+                    }">{{ cardIndex !== null ? iconMap[selectedCard.suite] : 'mdi-cards-playing-outline' }}</v-icon>
                   </v-btn>
                 </v-fab-transition>
               </template>
@@ -64,18 +66,18 @@
             <!-- We're "conditionally mandating" because we don't need a card selected all the time. -->
             <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
               <v-row class="d-flex my-4" v-for="(icon, suite, x) in prettyMap" :key="x">
-                <v-item v-for="(card, i) in hand.filter((c) => c.suite === suite)" :key="i"
-                        v-slot:default="{ active, toggle }">
-                  <v-slide-x-transition>
-                    <v-card :color="active ? ( suite == 'h' || suite == 'd' ? 'red' : 'blue' ) : ''"
-                            @click="() => { selectedCard = card; toggle(); }"
-                            :height="cardSize"
-                            :width="cardSize"
-                            class="d-flex justify-center align-center">
-                      <span class="display-1">{{ card.label }} {{ icon }}</span>
-                    </v-card>
-                  </v-slide-x-transition>
-                </v-item>
+                  <v-item v-for="(card, i) in hand.filter((c) => c.suite === suite)" :key="i"
+                          v-slot:default="{ active, toggle }">
+                    <transition name="glow">
+                      <v-card :color="active ? ( suite === 'h' || suite === 'd' ? 'red' : 'blue' ) : ''"
+                              @click="() => { selectedCard = card; toggle(); }"
+                              :height="cardSize"
+                              :width="cardSize"
+                              class="d-flex justify-center align-center">
+                        <span class="display-1">{{ card.label }} {{ icon }}</span>
+                      </v-card>
+                    </transition>
+                  </v-item>
               </v-row>
             </v-item-group>
           </v-col>
@@ -112,6 +114,13 @@ import GameEventHub from './persistence';
 const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 const START_ANGLE = Math.PI / 2;
 
+const iconMap = {
+  h: 'mdi-cards-heart',
+  s: 'mdi-cards-spade',
+  c: 'mdi-cards-club',
+  d: 'mdi-cards-diamond',
+};
+
 interface TableItem {
   id: string;
   card: Card | null;
@@ -133,6 +142,9 @@ export default class App extends Vue {
 
   /** Object for mapping suites to their unicode representations. */
   private prettyMap: any = suitePrettyMap;
+
+  /** Object for mapping suites to their MD icons. */
+  private iconMap: any = iconMap;
 
   /* Models */
 
@@ -305,5 +317,22 @@ export { ALLOWED_PLAYERS };
   transition: all 500ms ease;
 }
 
+.glow-enter, .glow-leave-to, .fade-enter, .fade-leave-to {
+  opacity: 0;
+}
 
+.glow-enter-active, .glow-leave-active, .fade-enter-active, .fade-leave-active {
+  transition: opacity .5s;
+}
+
+.glow-enter-active, .glow-leave-active {
+  animation: glow 1s;
+  box-shadow: 0 0 0 2em rgba(255, 255, 255, 0);
+}
+
+@keyframes glow {
+  0% {
+    box-shadow: 0 0 0 0 #ff8a65;
+  }
+}
 </style>
