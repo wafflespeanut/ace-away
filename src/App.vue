@@ -204,7 +204,7 @@ export default class App extends Vue {
 
   private conn: GameEventHub = new ConnectionProvider();
 
-  /** Stypes applied to the cards within the table. */
+  /** Styles applied to the cards within the table. */
   private tableCardStyles(idx: number): object {
     const total = this.table.length ? this.table.length : 1;
     const angle = 2 * Math.PI / total;
