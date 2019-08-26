@@ -1,6 +1,7 @@
 <template>
   <v-app id="inspire">
-    <v-app-bar app>
+    <v-app-bar app dense>
+      <v-toolbar-title></v-toolbar-title>
       <v-row class="d-flex justify-center">
         <v-slide-y-transition>
           <v-alert v-if="alertMsg"
@@ -8,6 +9,9 @@
                     :type="alertType" elevation="2">{{ alertMsg }}</v-alert>
         </v-slide-y-transition>
       </v-row>
+      <v-btn icon @click="showTutorial = true">
+        <v-icon>mdi-help-circle-outline</v-icon>
+      </v-btn>
     </v-app-bar>
     <v-content>
       <v-container fluid>
@@ -22,7 +26,7 @@
               <transition-group name="fade">
                 <v-card :style="tableCardStyles(i)"
                         class="d-flex flex-column align-center justify-center"
-                        v-for="(item, i) in table" :key="i"
+                        v-for="(item, i) in table" :key="i + 0"
                         :height="0.9 * cardSize" :width="0.9 * cardSize"
                         :elevation="item.turn ? 8 : 2"
                         :color="item.won ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
@@ -92,6 +96,7 @@
         </v-overlay>
       </v-container>
       <JoinRoom @player-set="v => playerID = v" :players="allowedPlayers" :showDialog="roomJoined === null" />
+      <Tutorial @close="showTutorial = false" @tutorial-step="stepTutorial" :showDialog="showTutorial" />
     </v-content>
     <v-snackbar class="mt-4" v-if="notification !== null" :value="true" :timeout="0">
       {{ notification }}
@@ -106,6 +111,7 @@ import Vue from 'vue';
 import Component from 'vue-class-component';
 
 import JoinRoom from './dialog/JoinRoom.vue';
+import Tutorial from './dialog/Tutorial.vue';
 import { Card, Suite, suitePrettyMap, Label, PlayerCard, GameEvent, suiteRanks, labelRanks } from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
@@ -131,6 +137,7 @@ interface TableItem {
 @Component({
   components: {
     JoinRoom,
+    Tutorial,
   },
 })
 export default class App extends Vue {
@@ -147,6 +154,8 @@ export default class App extends Vue {
   private iconMap: any = iconMap;
 
   /* Models */
+
+  private showTutorial: boolean = false;
 
   /** Name set by the player (after creating/joining a room). */
   private playerID: string = '';
@@ -302,6 +311,10 @@ export default class App extends Vue {
     });
 
     this.cardIndex = null;
+  }
+
+  private stepTutorial() {
+    //
   }
 
   /** Sets the snackbar message. */

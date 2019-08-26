@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="400" persistent>
+  <v-dialog :hide-overlay="true" v-model="showDialog" max-width="400" persistent>
     <v-card>
       <v-list-item>
         <v-card-title class="headline">{{ headline }} Room</v-card-title>
