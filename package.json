@@ -24,6 +24,9 @@
     "vue-template-compiler": "^2.6.10",
     "vuetify-loader": "^1.2.2"
   },
+  "vue": {
+    "publicPath": "./"
+  },
   "postcss": {
     "plugins": {
       "autoprefixer": {}
