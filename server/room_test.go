@@ -137,15 +137,20 @@ func TestOnePlayerExited(t *testing.T) {
 	p3 := room.players["player3"]
 	assert.Empty(p3.hand)
 
-	for _, c := range turns {
-		_, err := h.applyPlayerTurn(room, c.ID, c.Card)
+	for i, c := range turns {
+		effect, err := h.applyPlayerTurn(room, c.ID, c.Card)
+		if i == 1 {
+			assert.EqualValues(effect, tableFull)
+			room.setDealerForNextRound()
+			room.table = make([]PlayerCard, 0)
+		}
+
 		assert.Nil(err)
 	}
 
 	p2 := room.players["player2"] // player2 is still the dealer
 	assert.True(p2.dealer)
 	assert.EqualValues(room.currentTurn, 1)
-	assert.Empty(room.table)
 }
 
 func setup3PlayerRoom(hands []string) (*Room, *Hub) {

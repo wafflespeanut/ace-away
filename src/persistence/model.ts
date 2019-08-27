@@ -89,12 +89,12 @@ enum Label {
   Ace   = 'A',
 }
 
-/** Score map for sorting suites */
-const suiteRanks: any = {
-  d: 1,
-  c: 10,
-  h: 100,
-  s: 1000,
+/** Index map for placing suites. */
+const suiteIndices: any = {
+  d: 0,
+  c: 1,
+  h: 2,
+  s: 3,
 };
 
 /** Score map for sorting labels */
@@ -115,7 +115,7 @@ const labelRanks: any = {
 };
 
 export {
-  Card, Label, Suite, labelRanks, suiteRanks, suitePrettyMap,
+  Card, Label, Suite, labelRanks, suiteIndices, suitePrettyMap,
   DealResponse, RoomResponse, GameEvent, RoomCreationRequest,
   ClientMessage, ServerMessage, PlayerCard, TurnRequest,
 };

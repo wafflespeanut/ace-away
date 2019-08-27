@@ -30,9 +30,9 @@
                         :height="0.9 * cardSize" :width="0.9 * cardSize"
                         :elevation="item.turn ? 8 : 2"
                         :color="item.won ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
-                  <div v-if="item.won">[no cards]</div>
+                  <div v-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
                   <div v-else-if="item.turn">???</div>
-                  <div v-else-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
+                  <div v-else-if="item.won">[no cards]</div>
                   <div v-else>-</div>
                   <div class="caption">{{ item.id }}</div>
                 </v-card>
@@ -42,14 +42,14 @@
           <v-row :style="{
             'flex-grow': $vuetify.breakpoint.mdAndUp ? '0' : '1',
           }" class="d-flex justify-center align-center mt-5 mb-5">
-            <v-tooltip bottom v-if="hand.length">
+            <v-tooltip v-if="roomJoined" bottom>
               <template v-slot:activator="{ on }">
                 <v-fab-transition>
                   <v-btn fab icon
                          :width="$vuetify.breakpoint.xs ? 80 : 100"
                          :height="$vuetify.breakpoint.xs ? 80 : 100"
                          :color="selectedCard ? (selectedCard.suite === 'h' || selectedCard.suite === 'd') ? 'red' : 'blue' : ''"
-                         :disabled="cardIndex === null"
+                         :disabled="cardIndex === null || tableLocked"
                          v-on="$vuetify.breakpoint.smAndUp ? on : () => {}"
                          @click="sendToPile">
                     <v-icon :class="{
@@ -69,19 +69,19 @@
           }">
             <!-- We're "conditionally mandating" because we don't need a card selected all the time. -->
             <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
-              <v-row class="d-flex my-4" v-for="(icon, suite, x) in prettyMap" :key="x">
-                  <v-item v-for="(card, i) in hand.filter((c) => c.suite === suite)" :key="i"
-                          v-slot:default="{ active, toggle }">
-                    <transition name="glow">
-                      <v-card :color="active ? ( suite === 'h' || suite === 'd' ? 'red' : 'blue' ) : ''"
-                              @click="() => { selectedCard = card; toggle(); }"
+              <v-row class="d-flex my-4" v-for="(item, x) in hand" :key="x">
+                  <transition-group class="d-flex" name="glow">
+                    <v-item v-for="l in item.labels" :key="l.label + item.suite"
+                            v-slot:default="{ active, toggle }">
+                      <v-card :color="active ? ( item.suite === 'h' || item.suite === 'd' ? 'red' : 'blue' ) : ''"
+                              @click="() => { selectedCard = { suite: item.suite, label: l.label }; toggle(); }"
                               :height="cardSize"
                               :width="cardSize"
                               class="d-flex justify-center align-center">
-                        <span class="display-1">{{ card.label }} {{ icon }}</span>
+                        <span class="display-1">{{ l.label }} {{ prettyMap[item.suite] }}</span>
                       </v-card>
-                    </transition>
-                  </v-item>
+                    </v-item>
+                  </transition-group>
               </v-row>
             </v-item-group>
           </v-col>
@@ -112,13 +112,17 @@ import Component from 'vue-class-component';
 
 import JoinRoom from './dialog/JoinRoom.vue';
 import Tutorial from './dialog/Tutorial.vue';
-import { Card, Suite, suitePrettyMap, Label, PlayerCard, GameEvent, suiteRanks, labelRanks } from './persistence/model';
+import {
+  Card, Suite, suitePrettyMap, Label, PlayerCard,
+  GameEvent, suiteIndices, labelRanks,
+} from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
 import GameEventHub from './persistence';
 
 const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 const START_ANGLE = Math.PI / 2;
+const TABLE_LOCK_TIME = 5000;
 
 const iconMap = {
   h: 'mdi-cards-heart',
@@ -127,11 +131,46 @@ const iconMap = {
   d: 'mdi-cards-diamond',
 };
 
+interface CardLabel {
+  label: string;
+  updated: boolean;
+}
+
+interface HandItem {
+  suite: string;
+  labels: CardLabel[];
+}
+
 interface TableItem {
   id: string;
   card: Card | null;
   turn: boolean;
   won: boolean;
+}
+
+function searchSortedIndex<T>(items: T[], newItem: T, compare: (e1: T, e2: T) => number) {
+  if (items.length === 0 || compare(items[0], newItem) > 0) {
+    return 0;
+  }
+
+  let i = 1;
+  for (i; i < items.length; i++) {
+    const first = compare(items[i - 1], newItem);
+    if (first === 0) {
+      return i - 1;
+    }
+
+    const second = compare(items[i], newItem);
+    if (second === 0) {
+      return i;
+    }
+
+    if (first < 0 && second > 0) {
+      return i;
+    }
+  }
+
+  return i;
 }
 
 @Component({
@@ -149,6 +188,9 @@ export default class App extends Vue {
 
   /** Object for mapping suites to their unicode representations. */
   private prettyMap: any = suitePrettyMap;
+
+  /** Object for mapping suites to their indices in hand. */
+  private indexMap: any = suiteIndices;
 
   /** Object for mapping suites to their MD icons. */
   private iconMap: any = iconMap;
@@ -182,10 +224,14 @@ export default class App extends Vue {
   private cardIndex: number | null = null;
 
   /** Player's hand containing their cards sorted by their labels and suites. */
-  private hand: Card[] = [];
+  private hand: HandItem[] = [];
 
   /** Table containing the cards from all players for that round. */
   private table: TableItem[] = [];
+
+  private previousTurnLength: number = 0;
+
+  private tableLocked: boolean = false;
 
   /** Size of the card based on viewports. */
   private get cardSize(): number {
@@ -229,6 +275,15 @@ export default class App extends Vue {
   }
 
   private created() {
+    this.hand = Object.keys(suiteIndices)
+      .sort((a, b) => suiteIndices[a] - suiteIndices[b])
+      .map((s) => {
+        return {
+          suite: s,
+          labels: [],
+        };
+      });
+
     this.conn.onError(this.showError, true);
 
     this.conn.onPlayerJoin((resp) => {
@@ -260,23 +315,45 @@ export default class App extends Vue {
     }, true);
 
     this.conn.onPlayerTurn((resp) => {
-      // Sort the hand based on suites followed by labels.
-      this.hand = resp.response.hand.sort((c1, c2) => {
-        return suiteRanks[c1.suite] * labelRanks[c1.label] - suiteRanks[c2.suite] * labelRanks[c2.label];
-      });
+      const updateStuff = () => {
+        // Sort the hand based on suites followed by labels.
+        this.updateHand(resp.response.hand);
+        this.previousTurnLength = resp.response.table.length;
 
-      // Reset states of cards in our table.
-      this.table.forEach((v) => {
-        v.won = false;
-        v.card = null;
-        v.turn = v.id === resp.response.turnPlayer;
-      });
+        // Reset states of cards in our table (if the table isn't locked).
+        this.table.forEach((v) => {
+          v.won = false;
+          v.card = null;
+          v.turn = v.id === resp.response.turnPlayer;
+        });
 
-      // Get the cards and set them in our table.
-      resp.response.table.forEach((c) => {
-        const idx = this.table.findIndex((v) => v.id === c.id); // This will exist.
-        this.table[idx].card = c.card;
-      });
+        // Get the cards and set them in our table.
+        resp.response.table.forEach((c) => {
+          const idx = this.table.findIndex((v) => v.id === c.id); // This will exist.
+          this.table[idx].card = c.card;
+        });
+      };
+
+      if (resp.response.table.length < this.previousTurnLength) {
+        // If the table is getting cleared, lock the table and
+        // pause for a moment for users to see what happened.
+        // We're fine delaying this turn because we don't allow the
+        // users to place a card in this interval, and so we won't
+        // get any `playerTurn` events.
+        this.tableLocked = true;
+        setTimeout(() => {
+          this.alertType = 'success';
+          this.alertMsg = 'Table cleared!';
+          setTimeout(() => {
+            this.alertMsg = null;
+          }, 3000);
+
+          updateStuff();
+          this.tableLocked = false;
+        }, TABLE_LOCK_TIME);
+      } else {
+        updateStuff();
+      }
     }, true);
 
     this.conn.onPlayerWin((resp) => {
@@ -296,6 +373,45 @@ export default class App extends Vue {
         this.overlayMsg = `${resp.player} has leftover card(s) and loses.`;
       }
     });
+  }
+
+  private updateHand(newHand: Card[], timeout: number | null = null, initial: boolean = true) {
+    if (initial) {
+      this.hand.forEach((item) => {
+        item.labels.forEach((l) => {
+          l.updated = false;
+        });
+      });
+    }
+
+    setTimeout(() => {
+      const card = newHand.pop();
+      if (card === undefined) {
+        let noMoreItems = true;
+        this.hand.forEach((item) => {
+          const idx = item.labels.findIndex((c) => !c.updated);
+          if (idx >= 0) {
+            item.labels.splice(idx, 1);
+          }
+
+          noMoreItems = noMoreItems && idx < 0;
+        });
+
+        if (!noMoreItems) {
+          this.updateHand(newHand, null, false);
+        }
+
+        return;
+      }
+
+      const i = suiteIndices[card.suite];
+      const labels = this.hand[i].labels;
+      const label = { label: card.label, updated: true };
+      const j = searchSortedIndex(labels, label, (c1, c2) => labelRanks[c1.label] - labelRanks[c2.label]);
+      const delCount = labels[j] && labels[j].label === card.label ? 1 : 0;
+      labels.splice(j, delCount, label);
+      this.updateHand(newHand, null, false);
+    }, timeout ? timeout : 50);
   }
 
   /** Sends the player-selected card to the pile of cards in the table. */
@@ -334,13 +450,17 @@ export { ALLOWED_PLAYERS };
   opacity: 0;
 }
 
-.glow-enter-active, .glow-leave-active, .fade-enter-active, .fade-leave-active {
+.fade-enter-active, .fade-leave-active {
   transition: opacity .5s;
 }
 
 .glow-enter-active, .glow-leave-active {
   animation: glow 1s;
   box-shadow: 0 0 0 2em rgba(255, 255, 255, 0);
+}
+
+.glow-enter-active, .glow-leave-active, .glow-move {
+  transition: all 1s;
 }
 
 @keyframes glow {

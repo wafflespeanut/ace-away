@@ -10,6 +10,15 @@ import (
 	"golang.org/x/net/websocket"
 )
 
+type turnEffect int
+
+const (
+	turnApplied = iota
+	turnFailed
+	tableFull
+	gameEnds
+)
+
 // Player represents a player with an active websocket connection.
 // A player can belong to one room at most.
 type Player struct {
@@ -177,15 +186,6 @@ func (r *Room) addCardToTable(playerID string, player *Player, card Card) bool {
 		Card: card,
 	})
 
-	// If table has reached its limit, then we can set the dealer and
-	// begin the next round.
-	if r.tableReachedLimit() {
-		// log.Println("Table reached limit. Setting dealer for next round.")
-		r.setDealerForNextRound()
-		r.table = make([]PlayerCard, 0)
-		return true
-	}
-
 	nextPlayer := r.nextPlayerWithHand(player.index)
 	if nextPlayer == nil {
 		return false
@@ -298,9 +298,17 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 		}
 	}
 
-	gameEnds, e := hub.applyPlayerTurn(room, playerID, req.Card)
+	turnEffect, e := hub.applyPlayerTurn(room, playerID, req.Card)
 	if e != nil {
 		return e
+	}
+
+	if turnEffect == tableFull {
+		// Notify players before clearing the table.
+		room.dealConnectedPlayers(ws)
+		// log.Println("Table reached limit. Setting dealer for next round.")
+		room.setDealerForNextRound()
+		room.table = make([]PlayerCard, 0)
 	}
 
 	room.dealConnectedPlayers(ws)
@@ -316,7 +324,7 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 	}
 
 	// If game has ended, broadcast victim's losing to all players.
-	if gameEnds {
+	if turnEffect == gameEnds {
 		var victimID string
 		for id, p := range room.players {
 			if len(p.hand) > 0 {
@@ -339,39 +347,47 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 // applyPlayerTurn (after validation) in the given room using the player and their card.
 //
 // **NOTE:** The caller is responsible for synchronizing access to room pointer.
-func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (bool, *HandlerError) {
+func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (turnEffect, *HandlerError) {
 	// log.Printf("Before update: %s", room.debugString())
 	player := room.players[playerID]
 	// Check whether the player has that card and remove it.
 	if !player.removeCard(card) {
-		return false, &HandlerError{
+		return turnFailed, &HandlerError{
 			Msg: "You don't have that card.",
 		}
 	}
-
-	var gameEnds bool
 
 	// If player has that card, then it's automatically valid. Let's rank stuff.
 	if len(room.table) == 0 {
 		// Table is empty. If the player isn't the dealer, reject the request.
 		if !player.dealer {
 			player.hand = append(player.hand, card)
-			return false, &HandlerError{
+			return turnFailed, &HandlerError{
 				Msg: "Only dealers are allowed to start a round.",
 			}
 		}
 
-		gameEnds = !room.addCardToTable(playerID, player, card)
+		if !room.addCardToTable(playerID, player, card) {
+			return gameEnds, nil
+		}
 	} else if room.matchesSuite(card) {
 		// Card matches the suites in table.
-		gameEnds = !room.addCardToTable(playerID, player, card)
+		if !room.addCardToTable(playerID, player, card) {
+			return gameEnds, nil
+		}
+
+		// If table has reached its limit, then we can set the dealer and
+		// begin the next round.
+		if room.tableReachedLimit() {
+			return tableFull, nil
+		}
 	} else {
 		// No match! If the player has that suite and is making an illegal move,
 		// reject that request.
 		matchedCard := player.containsSuite(room.table[0].Card)
 		if matchedCard != nil {
 			player.hand = append(player.hand, card)
-			return false, &HandlerError{
+			return turnFailed, &HandlerError{
 				Msg: fmt.Sprintf("Illegal move. You have %s%s which matches the suite in table.",
 					matchedCard.Label, prettyMap[matchedCard.Suite]),
 			}
@@ -387,11 +403,13 @@ func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (bool, *
 		}
 
 		room.table = make([]PlayerCard, 0)
-		gameEnds = room.nextPlayerWithHand(newDealer.index) == nil
+		if room.nextPlayerWithHand(newDealer.index) == nil {
+			return gameEnds, nil
+		}
 	}
 
 	// log.Printf("After update: %s", room.debugString())
-	return gameEnds, nil
+	return turnApplied, nil
 }
 
 // Adds player to a room. The room must exist at this point. Also does some sanity
