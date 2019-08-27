@@ -34,6 +34,9 @@ type Player struct {
 	// Whether this player has left this room and has been disabled.
 	// If they have, then another player can take their place.
 	left bool
+	// Whether this player has exited this room after getting rid
+	// of all of their cards.
+	exited bool
 }
 
 // debugString for `Player`
@@ -99,12 +102,29 @@ func (r *Room) debugString() string {
 	return s
 }
 
+// endRound in this room by clearing the table. If a player
+// doesn't have any card in their hand, then the player is marked
+// "exited" and their ID is returned.
+func (r *Room) endRound() string {
+	playerID := ""
+
+	r.table = make([]PlayerCard, 0)
+	for id, p := range r.players {
+		if len(p.hand) == 0 && !p.exited {
+			p.exited = true
+			playerID = id
+		}
+	}
+
+	return playerID
+}
+
 // tableReachedLimit returns whether the table has cards from all players
-// with cards in their hands, indicating the end of a round.
+// with at least one card in their hands, indicating the end of a round.
 func (r *Room) tableReachedLimit() bool {
 	l := len(r.table)
 	for _, p := range r.players {
-		if len(p.hand) > 0 {
+		if !p.exited {
 			l--
 		}
 	}
@@ -217,7 +237,7 @@ func (r *Room) playerIDs() []string {
 func (r *Room) winnerIDs() []string {
 	players := make([]string, 0)
 	for k, p := range r.players {
-		if len(p.hand) == 0 {
+		if p.exited {
 			players = append(players, k)
 		}
 	}
@@ -307,20 +327,20 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 		// Notify players before clearing the table.
 		room.dealConnectedPlayers(ws)
 		// log.Println("Table reached limit. Setting dealer for next round.")
-		room.table = make([]PlayerCard, 0)
+		winnerID := room.endRound()
+		// Broadcast winning message to all players at the end of a round.
+		if winnerID != "" {
+			for _, p := range room.players {
+				websocket.JSON.Send(p.conn, &GameMessage{
+					Player: winnerID,
+					Room:   p.roomID,
+					Event:  eventPlayerWins,
+				})
+			}
+		}
 	}
 
 	room.dealConnectedPlayers(ws)
-	// Broadcast winning message to all players.
-	if len(player.hand) == 0 {
-		for _, p := range room.players {
-			websocket.JSON.Send(p.conn, &GameMessage{
-				Player: playerID,
-				Room:   p.roomID,
-				Event:  eventPlayerWins,
-			})
-		}
-	}
 
 	// If game has ended, broadcast victim's losing to all players.
 	if turnEffect == gameEnds {

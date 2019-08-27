@@ -121,6 +121,78 @@ func TestRepetitiveDumps(t *testing.T) {
 	assert.NotContains(p3.hand, Card{Label: "A", Suite: "s"})
 }
 
+func TestOnePlayerExiting(t *testing.T) {
+	assert := assert.New(t)
+	hands := []string{
+		"[{\"label\":\"3\",\"suite\":\"c\"},{\"label\":\"2\",\"suite\":\"h\"},{\"label\":\"9\",\"suite\":\"s\"},{\"label\":\"5\",\"suite\":\"h\"},{\"label\":\"2\",\"suite\":\"d\"},{\"label\":\"8\",\"suite\":\"s\"},{\"label\":\"3\",\"suite\":\"h\"},{\"label\":\"8\",\"suite\":\"h\"}]",
+		"[{\"label\":\"3\",\"suite\":\"s\"},{\"label\":\"4\",\"suite\":\"s\"},{\"label\":\"6\",\"suite\":\"s\"},{\"label\":\"2\",\"suite\":\"s\"},{\"label\":\"9\",\"suite\":\"h\"},{\"label\":\"7\",\"suite\":\"h\"},{\"label\":\"7\",\"suite\":\"s\"}]",
+		"[{\"label\":\"6\",\"suite\":\"h\"}]",
+	}
+
+	room, h := setup3PlayerRoom(hands)
+	room.currentTurn = 1
+	room.players["player2"].dealer = true
+
+	turns := [...]PlayerCard{
+		PlayerCard{"player2", Card{Label: "9", Suite: "h"}},
+		PlayerCard{"player3", Card{Label: "6", Suite: "h"}},
+		PlayerCard{"player1", Card{Label: "8", Suite: "h"}},
+	}
+
+	for i, c := range turns {
+		effect, err := h.applyPlayerTurn(room, c.ID, c.Card)
+		assert.Nil(err)
+		if i == 2 {
+			assert.EqualValues(effect, tableFull)
+			winner := room.endRound()
+			assert.Equal(winner, "player3")
+		} else {
+			assert.EqualValues(effect, turnApplied)
+		}
+	}
+
+	p3 := room.players["player3"]
+	assert.Empty(p3.hand)
+	assert.Empty(room.table)
+	assert.True(p3.exited)
+}
+
+func TestOnePlayerCaughtWhileExiting(t *testing.T) {
+	assert := assert.New(t)
+	hands := []string{
+		"[{\"label\":\"7\",\"suite\":\"d\"},{\"label\":\"4\",\"suite\":\"d\"},{\"label\":\"8\",\"suite\":\"d\"},{\"label\":\"6\",\"suite\":\"d\"},{\"label\":\"3\",\"suite\":\"s\"},{\"label\":\"6\",\"suite\":\"s\"}]",
+		"[{\"label\":\"6\",\"suite\":\"c\"},{\"label\":\"5\",\"suite\":\"d\"},{\"label\":\"4\",\"suite\":\"s\"},{\"label\":\"5\",\"suite\":\"s\"},{\"label\":\"3\",\"suite\":\"d\"},{\"label\":\"5\",\"suite\":\"c\"},{\"label\":\"3\",\"suite\":\"c\"},{\"label\":\"7\",\"suite\":\"c\"},{\"label\":\"2\",\"suite\":\"h\"},{\"label\":\"9\",\"suite\":\"d\"}]",
+		"[{\"label\":\"Q\",\"suite\":\"h\"}]",
+	}
+
+	room, h := setup3PlayerRoom(hands)
+	room.currentTurn = 1
+	room.players["player2"].dealer = true
+
+	turns := [...]PlayerCard{
+		PlayerCard{"player2", Card{Label: "2", Suite: "h"}},
+		PlayerCard{"player3", Card{Label: "Q", Suite: "h"}},
+		PlayerCard{"player1", Card{Label: "7", Suite: "d"}},
+	}
+
+	p3 := room.players["player3"]
+	assert.EqualValues(len(p3.hand), 1)
+
+	for i, c := range turns {
+		effect, err := h.applyPlayerTurn(room, c.ID, c.Card)
+		assert.Nil(err)
+		if i == 2 {
+			winnerID := room.endRound()
+			assert.Equal(winnerID, "")
+			assert.EqualValues(effect, tableFull)
+		} else {
+			assert.EqualValues(effect, turnApplied)
+		}
+	}
+
+	assert.EqualValues(len(p3.hand), 3)
+}
+
 func TestOnePlayerExited(t *testing.T) {
 	assert := assert.New(t)
 	hands := []string{
@@ -132,6 +204,7 @@ func TestOnePlayerExited(t *testing.T) {
 	room, h := setup3PlayerRoom(hands)
 	room.currentTurn = 1
 	room.players["player2"].dealer = true
+	room.players["player3"].exited = true
 
 	turns := [...]PlayerCard{
 		PlayerCard{"player2", Card{Label: "A", Suite: "s"}},
@@ -140,14 +213,11 @@ func TestOnePlayerExited(t *testing.T) {
 		PlayerCard{"player1", Card{Label: "7", Suite: "s"}},
 	}
 
-	p3 := room.players["player3"]
-	assert.Empty(p3.hand)
-
 	for i, c := range turns {
 		effect, err := h.applyPlayerTurn(room, c.ID, c.Card)
 		if i == 1 {
 			assert.EqualValues(effect, tableFull)
-			room.table = make([]PlayerCard, 0)
+			room.endRound()
 		}
 
 		assert.Nil(err)
