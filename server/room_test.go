@@ -43,9 +43,9 @@ func TestPlayerGettingDumped(t *testing.T) {
 	assert.Contains(p1.hand, secondCard)
 	assert.Len(p1.hand, 11)
 
-	_, err = h.applyPlayerTurn(room, "player2", secondCard)
+	turnEffect, err := h.applyPlayerTurn(room, "player2", secondCard)
 	assert.Nil(err)
-	assert.Empty(room.table)
+	assert.EqualValues(turnEffect, tableFull)
 	assert.Len(p0.hand, 19)
 	assert.Contains(p0.hand, firstCard) // both cards are dumped to first player.
 	assert.Contains(p0.hand, secondCard)
@@ -99,9 +99,15 @@ func TestRepetitiveDumps(t *testing.T) {
 	assert.Contains(p3.hand, Card{Label: "3", Suite: "h"})
 	assert.Contains(p3.hand, Card{Label: "A", Suite: "s"})
 
-	for _, c := range turns {
-		_, err := h.applyPlayerTurn(room, c.ID, c.Card)
+	for i, c := range turns {
+		effect, err := h.applyPlayerTurn(room, c.ID, c.Card)
 		assert.Nil(err)
+		if i == 2 || i == 5 || i == 8 || i == 11 || i == 13 || i == 15 {
+			assert.EqualValues(effect, tableFull)
+		}
+		if effect == tableFull {
+			room.table = make([]PlayerCard, 0)
+		}
 	}
 
 	assert.EqualValues(room.currentTurn, 1)
@@ -141,7 +147,6 @@ func TestOnePlayerExited(t *testing.T) {
 		effect, err := h.applyPlayerTurn(room, c.ID, c.Card)
 		if i == 1 {
 			assert.EqualValues(effect, tableFull)
-			room.setDealerForNextRound()
 			room.table = make([]PlayerCard, 0)
 		}
 

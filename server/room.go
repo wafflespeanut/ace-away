@@ -307,7 +307,6 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID
 		// Notify players before clearing the table.
 		room.dealConnectedPlayers(ws)
 		// log.Println("Table reached limit. Setting dealer for next round.")
-		room.setDealerForNextRound()
 		room.table = make([]PlayerCard, 0)
 	}
 
@@ -379,6 +378,7 @@ func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (turnEff
 		// If table has reached its limit, then we can set the dealer and
 		// begin the next round.
 		if room.tableReachedLimit() {
+			room.setDealerForNextRound()
 			return tableFull, nil
 		}
 	} else {
@@ -402,10 +402,17 @@ func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (turnEff
 			newDealer.hand = append(newDealer.hand, c.Card)
 		}
 
-		room.table = make([]PlayerCard, 0)
+		// Temporarily add the card to table. Table will be cleared by the caller later.
+		room.table = append(room.table, PlayerCard{
+			ID:   playerID,
+			Card: card,
+		})
+
 		if room.nextPlayerWithHand(newDealer.index) == nil {
 			return gameEnds, nil
 		}
+
+		return tableFull, nil
 	}
 
 	// log.Printf("After update: %s", room.debugString())

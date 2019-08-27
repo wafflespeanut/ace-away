@@ -31,8 +31,8 @@
                         :elevation="item.turn ? 8 : 2"
                         :color="item.won ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
                   <div v-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
-                  <div v-else-if="item.turn">???</div>
                   <div v-else-if="item.won">[no cards]</div>
+                  <div v-else-if="item.turn">???</div>
                   <div v-else>-</div>
                   <div class="caption">{{ item.id }}</div>
                 </v-card>
@@ -351,10 +351,13 @@ export default class App extends Vue {
     }, true);
 
     this.conn.onPlayerTurn((resp) => {
+      const previousLength = this.previousTurnLength;
+      const currentLength = resp.response.table.length;
+      this.previousTurnLength = currentLength;
+
       const updateStuff = () => {
         // Sort the hand based on suites followed by labels.
         this.updateHand(resp.response.hand);
-        this.previousTurnLength = resp.response.table.length;
 
         // Reset states of cards in our table (if the table isn't locked).
         this.table.forEach((v) => {
@@ -370,7 +373,7 @@ export default class App extends Vue {
         });
       };
 
-      if (resp.response.table.length < this.previousTurnLength) {
+      if (currentLength < previousLength) {
         // If the table is getting cleared, lock the table and
         // pause for a moment for users to see what happened.
         // We're fine delaying this turn because we don't allow the
