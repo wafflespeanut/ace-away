@@ -37,6 +37,13 @@
                   <div class="caption">{{ item.id }}</div>
                 </v-card>
               </transition-group>
+              <transition v-if="tableLockTime !== null" name="fade">
+                <v-progress-circular :style="progressStyle"
+                                     color="red accent-2"
+                                     :value="tableLockTime"
+                                     :size="progressSize"
+                                     :width="progressWidth"></v-progress-circular>
+              </transition>
             </v-card>
           </v-row>
           <v-row :style="{
@@ -49,8 +56,8 @@
                          :width="$vuetify.breakpoint.xs ? 80 : 100"
                          :height="$vuetify.breakpoint.xs ? 80 : 100"
                          :color="selectedCard ? (selectedCard.suite === 'h' || selectedCard.suite === 'd') ? 'red' : 'blue' : ''"
-                         :disabled="cardIndex === null || tableLocked"
-                         v-on="$vuetify.breakpoint.smAndUp ? on : () => {}"
+                         :disabled="cardIndex === null || tableLockTime !== null"
+                         v-on="$vuetify.breakpoint.smAndUp ? on : {}"
                          @click="sendToPile">
                     <v-icon :class="{
                       'display-3': $vuetify.breakpoint.xs,
@@ -70,7 +77,7 @@
             <!-- We're "conditionally mandating" because we don't need a card selected all the time. -->
             <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
               <v-row class="d-flex my-4" v-for="(item, x) in hand" :key="x">
-                  <transition-group class="d-flex" name="glow">
+                  <transition-group class="row" name="card-group">
                     <v-item v-for="l in item.labels" :key="l.label + item.suite"
                             v-slot:default="{ active, toggle }">
                       <v-card :color="active ? ( item.suite === 'h' || item.suite === 'd' ? 'red' : 'blue' ) : ''"
@@ -122,7 +129,7 @@ import GameEventHub from './persistence';
 
 const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 const START_ANGLE = Math.PI / 2;
-const TABLE_LOCK_TIME = 5000;
+const TABLE_LOCK_TIME_MS = 5000;
 
 const iconMap = {
   h: 'mdi-cards-heart',
@@ -131,16 +138,19 @@ const iconMap = {
   d: 'mdi-cards-diamond',
 };
 
+/** Label for some suite. */
 interface CardLabel {
   label: string;
   updated: boolean;
 }
 
+/** Suite in hand. Also holds the labels grouped under that suite. */
 interface HandItem {
   suite: string;
   labels: CardLabel[];
 }
 
+/** Item in table. Holds player and card information. */
 interface TableItem {
   id: string;
   card: Card | null;
@@ -148,8 +158,17 @@ interface TableItem {
   won: boolean;
 }
 
+/**
+ * Performs a linear search through the array and finds the index for inserting
+ * the new element using the given compare function. If the element already exists,
+ * then its index is returned.
+ *
+ * @param items Array to be searched.
+ * @param newItem New element to be inserted.
+ * @param compare Compare function that returns a number.
+ */
 function searchSortedIndex<T>(items: T[], newItem: T, compare: (e1: T, e2: T) => number) {
-  if (items.length === 0 || compare(items[0], newItem) > 0) {
+  if (items.length === 0 || compare(items[0], newItem) >= 0) {
     return 0;
   }
 
@@ -229,9 +248,11 @@ export default class App extends Vue {
   /** Table containing the cards from all players for that round. */
   private table: TableItem[] = [];
 
+  /** Number of cards in table in the previous round */
   private previousTurnLength: number = 0;
 
-  private tableLocked: boolean = false;
+  /** Number indicating whether the table is locked (happens at the end of each round). */
+  private tableLockTime: number | null = null;
 
   /** Size of the card based on viewports. */
   private get cardSize(): number {
@@ -253,6 +274,21 @@ export default class App extends Vue {
     } else {
       return 450;
     }
+  }
+
+  /** Progress bar size (px). */
+  private progressSize: number = this.tableSize / 2;
+
+  /** Progress bar width (px). */
+  private progressWidth: number = 8;
+
+  /** Styles for progress bar. */
+  private get progressStyle(): object {
+    const transPos = this.tableSize / 2 - this.progressSize / 2 + this.progressWidth / 2;
+    return {
+      position: 'absolute',
+      transform: `translate(${transPos}px, ${transPos}px)`,
+    };
   }
 
   /* Internal properties */
@@ -340,7 +376,7 @@ export default class App extends Vue {
         // We're fine delaying this turn because we don't allow the
         // users to place a card in this interval, and so we won't
         // get any `playerTurn` events.
-        this.tableLocked = true;
+        const timeout = this.initiateTableLockdown();
         setTimeout(() => {
           this.alertType = 'success';
           this.alertMsg = 'Table cleared!';
@@ -349,8 +385,7 @@ export default class App extends Vue {
           }, 3000);
 
           updateStuff();
-          this.tableLocked = false;
-        }, TABLE_LOCK_TIME);
+        }, timeout);
       } else {
         updateStuff();
       }
@@ -375,8 +410,45 @@ export default class App extends Vue {
     });
   }
 
+  /**
+   * Initiates a cooldown time by locking the table and hence preventing
+   * the users from placing any more cards. This is done in the end of
+   * each round.
+   *
+   * @returns Timeout (in ms) until the table is locked.
+   */
+  private initiateTableLockdown(): number {
+    const remaining = Math.floor(TABLE_LOCK_TIME_MS / 1000);
+    this.tableLockTime = 100;
+    for (let i = 1; i <= remaining; i++) {
+      setTimeout(() => {
+        this.tableLockTime = ((remaining - i) / remaining) * 100;
+        if (i === remaining) {
+          setTimeout(() => {
+            this.tableLockTime = null;
+          }, 500);
+        }
+      }, i * 1000);
+    }
+
+    return remaining * 1000;
+  }
+
+  /**
+   * Updates the player's hand with new cards from the server.
+   *
+   * Even though we could maintain the same structure (`[]Card`) and let Vue
+   * show the transitions, we don't, because we need to group based on suites
+   * and sort them. This means we're (mostly) on our own. So, we find the diff
+   * off the existing hand, and then go about adding/subtracting the cards.
+   *
+   * @param newHand Updated hand from the server.
+   * @param timeout Timeout for each card update (add/remove).
+   * @param initial Internal param for recursion.
+   */
   private updateHand(newHand: Card[], timeout: number | null = null, initial: boolean = true) {
     if (initial) {
+      // Mark all cards as old.
       this.hand.forEach((item) => {
         item.labels.forEach((l) => {
           l.updated = false;
@@ -385,32 +457,41 @@ export default class App extends Vue {
     }
 
     setTimeout(() => {
-      const card = newHand.pop();
+      let card = newHand.pop();
+      while (card !== undefined) {
+        const i = suiteIndices[card.suite];
+        const labels = this.hand[i].labels;
+        const label = { label: card.label, updated: true };
+        const j = searchSortedIndex(labels, label, (c1, c2) => labelRanks[c1.label] - labelRanks[c2.label]);
+        if (labels[j] && labels[j].label === card.label) {
+          // If this card already exists, then mark it as updated and progress.
+          labels[j].updated = true;
+          card = newHand.pop();
+        } else {
+          // This is a new card (+ diff). Recurse with a timeout.
+          labels.splice(j, 0, label);
+          this.updateHand(newHand, null, false);
+          break;
+        }
+      }
+
+      // If we don't have any cards left, then progress to removal.
       if (card === undefined) {
-        let noMoreItems = true;
+        let itemsEmpty = true;
         this.hand.forEach((item) => {
           const idx = item.labels.findIndex((c) => !c.updated);
           if (idx >= 0) {
             item.labels.splice(idx, 1);
           }
 
-          noMoreItems = noMoreItems && idx < 0;
+          itemsEmpty = itemsEmpty && idx < 0;
         });
 
-        if (!noMoreItems) {
+        if (!itemsEmpty) {
+          // We have removed cards in this run. Recurse (- diff) with a timeout.
           this.updateHand(newHand, null, false);
         }
-
-        return;
       }
-
-      const i = suiteIndices[card.suite];
-      const labels = this.hand[i].labels;
-      const label = { label: card.label, updated: true };
-      const j = searchSortedIndex(labels, label, (c1, c2) => labelRanks[c1.label] - labelRanks[c2.label]);
-      const delCount = labels[j] && labels[j].label === card.label ? 1 : 0;
-      labels.splice(j, delCount, label);
-      this.updateHand(newHand, null, false);
     }, timeout ? timeout : 50);
   }
 
@@ -446,7 +527,7 @@ export { ALLOWED_PLAYERS };
   transition: all 500ms ease;
 }
 
-.glow-enter, .glow-leave-to, .fade-enter, .fade-leave-to {
+.card-group-enter, .card-group-leave-to, .fade-enter, .fade-leave-to {
   opacity: 0;
 }
 
@@ -454,18 +535,8 @@ export { ALLOWED_PLAYERS };
   transition: opacity .5s;
 }
 
-.glow-enter-active, .glow-leave-active {
-  animation: glow 1s;
-  box-shadow: 0 0 0 2em rgba(255, 255, 255, 0);
-}
-
-.glow-enter-active, .glow-leave-active, .glow-move {
+.card-group-enter-active, .card-group-leave-active, .card-group-move {
   transition: all 1s;
 }
 
-@keyframes glow {
-  0% {
-    box-shadow: 0 0 0 0 #ff8a65;
-  }
-}
 </style>

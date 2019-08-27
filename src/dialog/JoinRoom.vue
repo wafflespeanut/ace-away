@@ -4,7 +4,10 @@
       <v-list-item>
         <v-card-title class="headline">{{ headline }} Room</v-card-title>
         <v-row align="center" justify="end">
-          <v-switch v-model="isJoin" class="mx-5" label="Existing?"></v-switch>
+          <v-switch v-model="isJoin" :class="{
+            'mx-3': $vuetify.breakpoint.xs,
+            'mx-5': $vuetify.breakpoint.smAndUp,
+          }" label="Existing?"></v-switch>
         </v-row>
       </v-list-item>
       <v-card-text class="pl-8">{{ dialogText }}</v-card-text>
