@@ -284,7 +284,7 @@ func (r *Room) dealConnectedPlayers(ws *websocket.Conn) {
 }
 
 // validateAndApplyTurn from the given player in the given room.
-func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID string, playerID string, data *json.RawMessage) *HandlerError {
+func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID, playerID string, data *json.RawMessage) *HandlerError {
 	room, exists := hub.getRoom(roomID)
 	if !exists {
 		return &HandlerError{
@@ -441,7 +441,7 @@ func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (turnEff
 
 // Adds player to a room. The room must exist at this point. Also does some sanity
 // checks to ensure that some player cannot override someone else's stuff.
-func (hub *Hub) addPlayer(ws *websocket.Conn, roomID string, playerID string) *HandlerError {
+func (hub *Hub) addPlayer(ws *websocket.Conn, roomID, playerID string) *HandlerError {
 	swapPlayer := ""
 	room, exists := hub.getRoom(roomID)
 	if !exists {
@@ -542,7 +542,7 @@ func (hub *Hub) startGame(ws *websocket.Conn, room *Room) *HandlerError {
 }
 
 // Creates a room with the given data and adds the player to that room.
-func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID string, playerID string, data *json.RawMessage) *HandlerError {
+func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID, playerID string, data *json.RawMessage) *HandlerError {
 	for {
 		room, exists := hub.getRoom(roomID)
 		if roomID == "" {
@@ -589,4 +589,25 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID string, playerID
 
 	hub.setRoom(roomID, room)
 	return hub.addPlayer(ws, roomID, playerID)
+}
+
+// shareMessage from one player to everyone in the room (including the player).
+func (hub *Hub) shareMessage(ws *websocket.Conn, roomID, playerID, msg string) {
+	if msg == "" {
+		return
+	}
+
+	room, exists := hub.getRoom(roomID)
+	if !exists {
+		return
+	}
+
+	for _, p := range room.players {
+		websocket.JSON.Send(p.conn, &GameMessage{
+			Player: playerID,
+			Room:   roomID,
+			Event:  eventPlayerMsg,
+			Msg:    msg,
+		})
+	}
 }

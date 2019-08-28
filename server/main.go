@@ -31,6 +31,8 @@ const (
 	eventGameOver = "GameOver"
 	// Some player has successfully gotten rid of all cards in their hand.
 	eventPlayerWins = "PlayerWin"
+	// Player has sent a message.
+	eventPlayerMsg = "PlayerMsg"
 
 	minPlayers = 3
 	maxPlayers = 6

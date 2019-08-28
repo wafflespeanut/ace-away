@@ -1,6 +1,5 @@
 import {
-    ClientMessage, RoomCreationRequest, ServerMessage,
-    RoomResponse, GameEvent, DealResponse, TurnRequest,
+    ServerMessage, Card, RoomResponse, GameEvent, DealResponse,
 } from './model';
 
 /**
@@ -12,21 +11,28 @@ export default interface GameEventHub {
      *
      * @param req Room creation message.
      */
-    createRoom(req: ClientMessage<RoomCreationRequest>): void;
+    createRoom(playerId: string, roomName: string, numPlayers: number): void;
 
     /**
      * Requests the server to join the player in some existing room.
      *
      * @param req Join message.
      */
-    joinRoom(req: ClientMessage<{}>): void;
+    joinRoom(playerId: string, roomName: string): void;
 
     /**
      * Submits the player's card for that turn.
      *
      * @param req Turn message.
      */
-    showCard(req: ClientMessage<TurnRequest>): void;
+    showCard(playerId: string, roomName: string, card: Card): void;
+
+    /**
+     * Submits the player's message to other players.
+     *
+     * @param req Chat message.
+     */
+    sendMsg(playerId: string, roomName: string, msg: string): void;
 
     /**
      * Adds a listener for errors.
@@ -51,6 +57,14 @@ export default interface GameEventHub {
      * @param persist Whether to persist that callback or destroy it after the first call.
      */
     onPlayerTurn(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean): void;
+
+    /**
+     * Adds a listener for player messaging event.
+     *
+     * @param callback Callback function
+     * @param persist Whether to persist that callback or destroy it after the first call.
+     */
+    onPlayerMsg(callback: (resp: ServerMessage<{}>) => void, persist?: boolean): void;
 
     /**
      * Adds a listener for player winning event.

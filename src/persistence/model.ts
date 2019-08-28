@@ -5,6 +5,7 @@ interface ClientMessage<T> {
   room: string;
   event: GameEvent;
   data: T;
+  msg?: string;
 }
 
 interface ServerMessage<T> {
@@ -45,6 +46,7 @@ enum GameEvent {
   roomMissing = 'RoomMissing',
   roomExists = 'RoomExists',
   playerTurn = 'PlayerTurn',
+  playerMsg = 'PlayerMsg',
   playerWins = 'PlayerWin',
   gameOver = 'GameOver',
 }

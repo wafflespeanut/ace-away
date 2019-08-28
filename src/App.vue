@@ -1,6 +1,32 @@
 <template>
-  <v-app id="inspire">
+  <v-app>
+    <v-navigation-drawer temporary v-model="drawerOpen" :width="drawerWidth" app>
+      <v-row class="d-flex flex-column mx-2 my-4 caption">
+        <div v-for="(msg, i) in messages" :key="i"
+             class="my-1"
+             :ref="(i === messages.length - 1) ? 'lastMessage' : null">
+          <span>[{{ msg.time }}] </span>
+          <span :class="msg.classes">{{ msg.sender }}</span>
+          <span>: </span>
+          <span>{{ msg.content }}</span>
+        </div>
+      </v-row>
+      <template v-slot:append>
+        <v-textarea placeholder="Send a message."
+                    v-model="playerMsg"
+                    @keyup.enter.native="postMessage"
+                    rows="3" solo no-resize absolute>
+          <template v-slot:append>
+            <v-btn @click="postMessage" icon>
+              <v-icon>mdi-comment</v-icon>
+            </v-btn>
+          </template>
+        </v-textarea>
+      </template>
+    </v-navigation-drawer>
     <v-app-bar app dense>
+      <v-app-bar-nav-icon v-if="roomJoined && !showTutorial"
+                          @click.stop="drawerOpen = !drawerOpen"></v-app-bar-nav-icon>
       <v-toolbar-title></v-toolbar-title>
       <v-row class="d-flex justify-center">
         <v-slide-y-transition>
@@ -9,7 +35,7 @@
                     :type="alertType" elevation="2">{{ alertMsg }}</v-alert>
         </v-slide-y-transition>
       </v-row>
-      <v-btn icon @click="showTutorial = true">
+      <v-btn :disabled="showTutorial" icon @click="beginTutorial">
         <v-icon>mdi-help-circle-outline</v-icon>
       </v-btn>
     </v-app-bar>
@@ -31,7 +57,7 @@
                         :elevation="item.turn ? 8 : 2"
                         :color="item.won ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
                   <div v-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
-                  <div v-else-if="item.won">[no cards]</div>
+                  <div v-else-if="item.won || winners.indexOf(item.id) >= 0">[no cards]</div>
                   <div v-else-if="item.turn">???</div>
                   <div v-else>-</div>
                   <div class="caption">{{ item.id }}</div>
@@ -49,7 +75,7 @@
           <v-row :style="{
             'flex-grow': $vuetify.breakpoint.mdAndUp ? '0' : '1',
           }" class="d-flex justify-center align-center mt-5 mb-5">
-            <v-tooltip v-if="roomJoined" bottom>
+            <v-tooltip v-if="roomJoined && !showTutorial" bottom>
               <template v-slot:activator="{ on }">
                 <v-fab-transition>
                   <v-btn fab icon
@@ -103,7 +129,9 @@
         </v-overlay>
       </v-container>
       <JoinRoom @player-set="v => playerID = v" :players="allowedPlayers" :showDialog="roomJoined === null" />
-      <Tutorial @close="showTutorial = false" @tutorial-step="stepTutorial" :showDialog="showTutorial" />
+      <Tutorial @close="endTutorial"
+                @tutorial-step="stepTutorial"
+                :playerNeedsHelp="showTutorial" />
     </v-content>
     <v-snackbar class="mt-4" v-if="notification !== null" :value="true" :timeout="0">
       {{ notification }}
@@ -118,13 +146,14 @@ import Vue from 'vue';
 import Component from 'vue-class-component';
 
 import JoinRoom from './dialog/JoinRoom.vue';
-import Tutorial from './dialog/Tutorial.vue';
+import Tutorial, { TutorialStep } from './dialog/Tutorial.vue';
 import {
   Card, Suite, suitePrettyMap, Label, PlayerCard,
   GameEvent, suiteIndices, labelRanks,
 } from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
+import TutorialProvider from './tutorial';
 import GameEventHub from './persistence';
 
 const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
@@ -156,6 +185,14 @@ interface TableItem {
   card: Card | null;
   turn: boolean;
   won: boolean;
+}
+
+/** Message object containing a message received from the server. */
+interface Message {
+  sender: string;
+  classes: string[];
+  time: string;
+  content: string;
 }
 
 /**
@@ -192,6 +229,36 @@ function searchSortedIndex<T>(items: T[], newItem: T, compare: (e1: T, e2: T) =>
   return i;
 }
 
+// All colors from https://vuetifyjs.com/en/styles/colors#material-colors.
+const COLORS = [
+  'red',
+  'pink',
+  'purple',
+  'deep-purple',
+  'blue',
+  'indigo',
+  'light-blue',
+  'cyan',
+  'teal',
+  'green',
+  'light-green',
+  'lime',
+  'yellow',
+  'amber',
+  'orange',
+  'deep-orange',
+  'brown',
+  'blue-grey',
+  'grey',
+];
+
+/** Returns the color for a player from known palette using the player ID. */
+function getColorForPlayer(id: string): string {
+  const sum = id.split('').reduce((old, value) => old + value.charCodeAt(0), 0);
+  const idx = sum % COLORS.length;
+  return COLORS[idx];
+}
+
 @Component({
   components: {
     JoinRoom,
@@ -200,26 +267,36 @@ function searchSortedIndex<T>(items: T[], newItem: T, compare: (e1: T, e2: T) =>
 })
 export default class App extends Vue {
 
+  /* Internal properties */
+
+  private conn: GameEventHub = new ConnectionProvider();
+
   /* Constants used by models */
 
   /** Allowed choices for players in rooms. */
-  private allowedPlayers: number[] = ALLOWED_PLAYERS;
+  private readonly allowedPlayers: number[] = ALLOWED_PLAYERS;
 
   /** Object for mapping suites to their unicode representations. */
-  private prettyMap: any = suitePrettyMap;
+  private readonly prettyMap: any = suitePrettyMap;
 
   /** Object for mapping suites to their indices in hand. */
-  private indexMap: any = suiteIndices;
+  private readonly indexMap: any = suiteIndices;
 
   /** Object for mapping suites to their MD icons. */
-  private iconMap: any = iconMap;
+  private readonly iconMap: any = iconMap;
+
+  /* Readonly models (models that shouldn't be updated manually). */
+
+  /** Whether the app drawer is open. */
+  private readonly drawerOpen: boolean = false;
+
+  /** Name set by the player (propagated by `JoinRoom`, after creating/joining a room). */
+  private readonly playerID: string = '';
 
   /* Models */
 
+  /** Whether the player has opened tutorial. */
   private showTutorial: boolean = false;
-
-  /** Name set by the player (after creating/joining a room). */
-  private playerID: string = '';
 
   /** Name of the room joined by the player (set after creating/joining a room). */
   private roomJoined: string | null = null;
@@ -248,11 +325,25 @@ export default class App extends Vue {
   /** Table containing the cards from all players for that round. */
   private table: TableItem[] = [];
 
+  /** Winners in this room. */
+  private winners: string[] = [];
+
   /** Number of cards in table in the previous round */
   private previousTurnLength: number = 0;
 
   /** Number indicating whether the table is locked (happens at the end of each round). */
   private tableLockTime: number | null = null;
+
+  /** Message written by the player. */
+  private playerMsg: string = '';
+
+  /** Messages received from the server. */
+  private messages: Message[] = [];
+
+  /* Style thingies */
+
+  /** Width of nav drawer. */
+  private drawerWidth: number = 300;
 
   /** Size of the card based on viewports. */
   private get cardSize(): number {
@@ -291,10 +382,6 @@ export default class App extends Vue {
     };
   }
 
-  /* Internal properties */
-
-  private conn: GameEventHub = new ConnectionProvider();
-
   /** Styles applied to the cards within the table. */
   private tableCardStyles(idx: number): object {
     const total = this.table.length ? this.table.length : 1;
@@ -310,7 +397,22 @@ export default class App extends Vue {
     };
   }
 
+  /* Vue methods */
+
   private created() {
+    this.initialize();
+    this.addListeners();
+  }
+
+  /* Internal methods */
+
+  /** Initialize this component. Particularly useful to reset this component. */
+  private initialize() {
+    this.showTutorial = false;
+    this.roomJoined = null;
+
+    this.conn = new ConnectionProvider();
+
     this.hand = Object.keys(suiteIndices)
       .sort((a, b) => suiteIndices[a] - suiteIndices[b])
       .map((s) => {
@@ -319,7 +421,10 @@ export default class App extends Vue {
           labels: [],
         };
       });
+  }
 
+  /* Add event listeners for changing game state on notifications. */
+  private addListeners() {
     this.conn.onError(this.showError, true);
 
     this.conn.onPlayerJoin((resp) => {
@@ -340,13 +445,10 @@ export default class App extends Vue {
       // Notify if we're waiting on player(s) joining.
       const diff = resp.response.max - resp.response.players.length;
       if (diff > 0) {
+        this.alertType = 'info';
         this.alertMsg = `Waiting for ${diff} more player(s) in room ${resp.room}.`;
       } else {
-        this.alertMsg = `Yay! Let's begin!`;
-        this.alertType = 'success';
-        setTimeout(() => {
-          this.alertMsg = null;
-        }, 3000);
+        this.showAlert(`Yay! Let's begin!`);
       }
     }, true);
 
@@ -375,18 +477,13 @@ export default class App extends Vue {
 
       if (currentLength < previousLength) {
         // If the table is getting cleared, lock the table and
-        // pause for a moment for users to see what happened.
+        // pause for a moment for players to see what happened.
         // We're fine delaying this turn because we don't allow the
-        // users to place a card in this interval, and so we won't
+        // players to place a card in this interval, and so we won't
         // get any `playerTurn` events.
         const timeout = this.initiateTableLockdown();
         setTimeout(() => {
-          this.alertType = 'success';
-          this.alertMsg = 'Table cleared!';
-          setTimeout(() => {
-            this.alertMsg = null;
-          }, 3000);
-
+          this.showAlert('Table cleared');
           updateStuff();
         }, timeout);
       } else {
@@ -397,12 +494,13 @@ export default class App extends Vue {
     this.conn.onPlayerWin((resp) => {
       const idx = this.table.findIndex((i) => i.id === resp.player);
       this.table[idx].won = true;
+      this.winners.push(resp.player);
       if (this.playerID === resp.player) {
         this.overlayMsg = `Congrats! You've escaped!`;
       } else {
         this.overlayMsg = `${resp.player} escapes.`;
       }
-    });
+    }, true);
 
     this.conn.onGameOver((resp) => {
       if (this.playerID === resp.player) {
@@ -411,11 +509,15 @@ export default class App extends Vue {
         this.overlayMsg = `${resp.player} has leftover card(s) and loses.`;
       }
     });
+
+    this.conn.onPlayerMsg((resp) => {
+      this.addMessage(resp.player, resp.msg);
+    }, true);
   }
 
   /**
    * Initiates a cooldown time by locking the table and hence preventing
-   * the users from placing any more cards. This is done in the end of
+   * the players from placing any more cards. This is done in the end of
    * each round.
    *
    * @returns Timeout (in ms) until the table is locked.
@@ -501,20 +603,75 @@ export default class App extends Vue {
   /** Sends the player-selected card to the pile of cards in the table. */
   private sendToPile() {
     console.log(`Player placing ${this.selectedCard!.label}${this.prettyMap[this.selectedCard!.suite]}`);
-    this.conn.showCard({
-      player: this.playerID,
-      room: this.roomJoined!,
-      event: GameEvent.playerTurn,
-      data: {
-        card: this.selectedCard!,
-      },
-    });
-
+    this.conn.showCard(this.playerID, this.roomJoined!, this.selectedCard!);
     this.cardIndex = null;
   }
 
-  private stepTutorial() {
-    //
+  /** Posts a message to everyone in the room. */
+  private postMessage() {
+    this.conn.sendMsg(this.playerID, this.roomJoined!, this.playerMsg);
+    this.playerMsg = '';
+  }
+
+  /** Player has requested for a tutorial. */
+  private beginTutorial() {
+    this.showTutorial = true;
+    this.conn = new TutorialProvider();
+    this.addListeners();
+  }
+
+  /** Player has progressed (to/fro) in tutorial. */
+  private stepTutorial(step: TutorialStep) {
+    if (step.room !== undefined) {
+      this.roomJoined = step.room;
+    }
+  }
+
+  /** Player has ended the tutorial. */
+  private endTutorial() {
+    this.initialize();
+    // NOTE: We shouldn't add listeners again here. Guess why!
+  }
+
+  /** Shows alert as an alert notification in the app bar. */
+  private showAlert(msg: string, ty: string = 'success') {
+    this.alertType = ty;
+    this.alertMsg = msg;
+    setTimeout(() => {
+      this.alertMsg = null;
+    }, 3000);
+  }
+
+  /** Adds incoming message from the server. */
+  private addMessage(sender: string, msg: string) {
+    const date = new Date();
+    let hours = String(date.getHours());
+    hours = ('00' + hours).substring(hours.length);
+    let mins = String(date.getMinutes());
+    mins = ('00' + mins).substring(mins.length);
+    const time = `${hours}:${mins}`;
+    const color = getColorForPlayer(sender);
+
+    this.messages.push({
+      classes: [`${color}--text`],
+      sender: sender === this.playerID ? 'You' : sender,
+      content: msg,
+      time,
+    });
+
+    // Offer gracious amount of time to render.
+    setTimeout(() => {
+      let el: any;
+      if (this.$refs.lastMessage instanceof Array && this.$refs.lastMessage.length > 0) {
+        el = this.$refs.lastMessage[0];
+      }
+
+      if (el.$el !== undefined) {
+        el = el.$el;
+      }
+
+      el.scrollIntoView();
+    }, 500);
   }
 
   /** Sets the snackbar message. */

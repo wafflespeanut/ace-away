@@ -123,21 +123,9 @@ export default class JoinRoom extends JoinRoomProps {
     });
 
     if (this.isJoin) {
-      this.conn.joinRoom({
-        player: this.player,
-        room: this.roomName,
-        event: GameEvent.playerJoin,
-        data: {},
-      });
+      this.conn.joinRoom(this.player, this.roomName);
     } else {
-      this.conn.createRoom({
-        player: this.player,
-        room: this.roomName,
-        event: GameEvent.createRoom,
-        data: {
-          players: this.numPlayers!,
-        },
-      });
+      this.conn.createRoom(this.player, this.roomName, this.numPlayers!);
     }
   }
 }

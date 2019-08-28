@@ -1,6 +1,6 @@
 import {
-  ClientMessage, RoomCreationRequest, ServerMessage,
-  RoomResponse, GameEvent, DealResponse, TurnRequest,
+  ClientMessage, ServerMessage,
+  RoomResponse, GameEvent, DealResponse, Card,
 } from './model';
 
 import GameEventHub from './';
@@ -26,16 +26,45 @@ export default class ConnectionProvider implements GameEventHub {
 
   /* Interface methods */
 
-  public createRoom(req: ClientMessage<RoomCreationRequest>) {
-    this.sendMessage(req);
+  public createRoom(playerId: string, roomName: string, numPlayers: number) {
+    this.sendMessage({
+      player: playerId,
+      room: roomName,
+      event: GameEvent.createRoom,
+      data: {
+        players: numPlayers,
+      },
+    });
   }
 
-  public joinRoom(req: ClientMessage<{}>) {
-    this.sendMessage(req);
+  public joinRoom(playerId: string, roomName: string) {
+    this.sendMessage({
+      player: playerId,
+      room: roomName,
+      event: GameEvent.playerJoin,
+      data: {},
+    });
   }
 
-  public showCard(req: ClientMessage<TurnRequest>) {
-    this.sendMessage(req);
+  public showCard(playerId: string, roomName: string, card: Card) {
+    this.sendMessage({
+      player: playerId,
+      room: roomName,
+      event: GameEvent.playerTurn,
+      data: {
+        card,
+      },
+    });
+  }
+
+  public sendMsg(playerId: string, roomName: string, msg: string) {
+    this.sendMessage({
+      player: playerId,
+      room: roomName,
+      event: GameEvent.playerMsg,
+      data: {},
+      msg,
+    });
   }
 
   public onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void, persist?: boolean) {
@@ -44,6 +73,10 @@ export default class ConnectionProvider implements GameEventHub {
 
   public onPlayerTurn(callback: (resp: ServerMessage<DealResponse>) => void, persist?: boolean) {
     this.onEvent(GameEvent.playerTurn, callback, persist);
+  }
+
+  public onPlayerMsg(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
+    this.onEvent(GameEvent.playerMsg, callback, persist);
   }
 
   public onPlayerWin(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
@@ -110,7 +143,7 @@ export default class ConnectionProvider implements GameEventHub {
    *
    * @param msg JSON object.
    */
-  private sendMessage<T>(msg: T) {
+  private sendMessage<T>(msg: ClientMessage<T>) {
     this.withConnection((ws) => {
       ws.send(JSON.stringify(msg));
     });
