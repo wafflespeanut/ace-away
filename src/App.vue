@@ -2,20 +2,21 @@
   <v-app>
     <v-navigation-drawer temporary v-model="drawerOpen" :width="drawerWidth" app>
       <v-row class="d-flex flex-column mx-2 my-4 caption">
-        <div v-for="(msg, i) in messages" :key="i"
-             class="my-1"
-             :ref="(i === messages.length - 1) ? 'lastMessage' : null">
-          <span>[{{ msg.time }}] </span>
-          <span :class="msg.classes">{{ msg.sender }}</span>
-          <span>: </span>
-          <span>{{ msg.content }}</span>
-        </div>
+        <v-card v-for="(msg, i) in messages" :key="i"
+                class="my-1"
+                :ref="(i === messages.length - 1) ? 'lastMessage' : null">
+          <v-row class="px-2">
+            <v-col :class="['pb-0', 'body-2', msg.color + '--text']">{{ msg.sender }}</v-col>
+            <v-col :class="['pb-0', 'text-right']">{{ msg.time }}</v-col>
+          </v-row>
+          <v-card-text class="pa-2 caption">{{ msg.content }}</v-card-text>
+        </v-card>
       </v-row>
       <template v-slot:append>
         <v-textarea placeholder="Send a message."
                     v-model="playerMsg"
                     @keyup.enter.native="postMessage"
-                    rows="3" solo no-resize absolute>
+                    rows="3" solo no-resize>
           <template v-slot:append>
             <v-btn @click="postMessage" icon>
               <v-icon>mdi-comment</v-icon>
@@ -43,10 +44,9 @@
       <v-container fluid>
         <v-row class="my-5"></v-row>
         <v-row class="d-flex flex-column flex-md-row">
-          <v-row v-if="table.length" :class="{
-            'mx-10': $vuetify.breakpoint.mdAndUp,
-            'mb-10': true,
-          }">
+          <v-row v-if="table.length" :class="[{
+            'mx-10': $vuetify.breakpoint.mdAndUp
+          }, 'mb-10']">
             <v-card :width="tableSize" :height="tableSize" class="mx-auto my-auto"
                     :style="{ borderRadius: '50%' }">
               <transition-group name="fade">
@@ -95,11 +95,11 @@
               <span>Add your card to the pile</span>
             </v-tooltip>
           </v-row>
-          <v-col :cols="$vuetify.breakpoint.mdAndUp ? '5' : 'auto'" :class="{
+          <v-col :cols="$vuetify.breakpoint.mdAndUp ? '5' : 'auto'" :class="[{
             'mx-5': $vuetify.breakpoint.xs,
+          }, {
             'mx-10': $vuetify.breakpoint.smAndUp,
-            'my-auto': true,
-          }">
+          }, 'my-auto']">
             <!-- We're "conditionally mandating" because we don't need a card selected all the time. -->
             <v-item-group :mandatory="cardIndex !== null" v-model="cardIndex">
               <v-row class="d-flex my-4" v-for="(item, x) in hand" :key="x">
@@ -190,7 +190,7 @@ interface TableItem {
 /** Message object containing a message received from the server. */
 interface Message {
   sender: string;
-  classes: string[];
+  color: string;
   time: string;
   content: string;
 }
@@ -410,7 +410,6 @@ export default class App extends Vue {
   private initialize() {
     this.showTutorial = false;
     this.roomJoined = null;
-
     this.conn = new ConnectionProvider();
 
     this.hand = Object.keys(suiteIndices)
@@ -653,7 +652,7 @@ export default class App extends Vue {
     const color = getColorForPlayer(sender);
 
     this.messages.push({
-      classes: [`${color}--text`],
+      color,
       sender: sender === this.playerID ? 'You' : sender,
       content: msg,
       time,
