@@ -57,9 +57,9 @@
                         v-for="(item, i) in table" :key="i + 0"
                         :height="0.9 * cardSize" :width="0.9 * cardSize"
                         :elevation="item.turn ? 8 : 2"
-                        :color="item.won ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
+                        :color="winners.indexOf(item.id) >=0 ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
                   <div v-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
-                  <div v-else-if="item.won || winners.indexOf(item.id) >= 0">[no cards]</div>
+                  <div v-else-if="winners.indexOf(item.id) >= 0">[no cards]</div>
                   <div v-else-if="item.turn">???</div>
                   <div v-else>-</div>
                   <div class="caption">{{ item.id }}</div>
@@ -186,7 +186,6 @@ interface TableItem {
   id: string;
   card: Card | null;
   turn: boolean;
-  won: boolean;
 }
 
 /** Message object containing a message received from the server. */
@@ -328,7 +327,7 @@ export default class App extends Vue {
   private table: TableItem[] = [];
 
   /** Winners in this room. */
-  private winners: string[] = [];
+  private winners: { [s: string]: boolean; } = {};
 
   /** Number of cards in table in the previous round */
   private previousTurnLength: number = 0;
@@ -429,13 +428,16 @@ export default class App extends Vue {
     this.conn.onError(this.showError, true);
 
     this.conn.onPlayerJoin((resp) => {
+      resp.response.escaped.forEach((id) => {
+        this.winners[id] = true;
+      });
+
       // Set player states.
       this.table = resp.response.players.map((id, i) => {
         return {
           id,
           card: null,
           turn: resp.response.turnIdx === i,
-          won: resp.response.escaped.indexOf(id) >= 0,
         };
       });
 
@@ -464,7 +466,6 @@ export default class App extends Vue {
 
         // Reset states of cards in our table (if the table isn't locked).
         this.table.forEach((v) => {
-          v.won = false;
           v.card = null;
           v.turn = v.id === resp.response.turnPlayer;
         });
@@ -494,8 +495,7 @@ export default class App extends Vue {
 
     this.conn.onPlayerWin((resp) => {
       const idx = this.table.findIndex((i) => i.id === resp.player);
-      this.table[idx].won = true;
-      this.winners.push(resp.player);
+      this.winners[resp.player] = true;
       if (this.playerID === resp.player) {
         this.overlayMsg = `Congrats! You've escaped!`;
       } else {
@@ -612,7 +612,6 @@ export default class App extends Vue {
   private postMessage() {
     this.playerMsg = this.playerMsg.trim();
     if (this.playerMsg !== '') {
-      console.log(`Sending message: ${this.playerMsg}`);
       this.conn.sendMsg(this.playerID, this.roomJoined!, this.playerMsg);
     }
 

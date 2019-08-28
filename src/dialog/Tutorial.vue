@@ -63,7 +63,9 @@ export default class Tutorial extends TutorialProps {
   }, {
     msgs: [
       `Ace is a game of cards.`,
-      `For a single deck of cards, 4-6 players can play at a time.`,
+      `For a single deck of cards, 4-6 players can play at a time. Although,
+ there's nothing stopping 2 or even 10 players from playing - only that the game
+ wouldn't be as interesting.`,
       `The goal is to get rid of all cards in
  your hand as soon as possible and "escape" the room.
  The player with leftover cards loses the game.`,
