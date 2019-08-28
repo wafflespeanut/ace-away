@@ -15,7 +15,9 @@
       <template v-slot:append>
         <v-textarea placeholder="Send a message."
                     v-model="playerMsg"
-                    @keyup.enter.native="postMessage"
+                    @keydown.enter.exact.native.prevent
+                    @keyup.enter.exact.native="postMessage"
+                    @keydown.enter.shift.exact.native="playerMsg = playerMsg + '\n'"
                     rows="3" solo no-resize>
           <template v-slot:append>
             <v-btn @click="postMessage" icon>
@@ -231,25 +233,25 @@ function searchSortedIndex<T>(items: T[], newItem: T, compare: (e1: T, e2: T) =>
 
 // All colors from https://vuetifyjs.com/en/styles/colors#material-colors.
 const COLORS = [
-  'red',
-  'pink',
-  'purple',
-  'deep-purple',
-  'blue',
   'indigo',
-  'light-blue',
-  'cyan',
-  'teal',
-  'green',
+  'pink',
   'light-green',
-  'lime',
-  'yellow',
-  'amber',
-  'orange',
-  'deep-orange',
-  'brown',
-  'blue-grey',
+  'deep-purple',
   'grey',
+  'lime',
+  'blue',
+  'light-blue',
+  'blue-grey',
+  'brown',
+  'cyan',
+  'orange',
+  'green',
+  'amber',
+  'yellow',
+  'teal',
+  'red',
+  'purple',
+  'deep-orange',
 ];
 
 /** Returns the color for a player from known palette using the player ID. */
@@ -608,7 +610,12 @@ export default class App extends Vue {
 
   /** Posts a message to everyone in the room. */
   private postMessage() {
-    this.conn.sendMsg(this.playerID, this.roomJoined!, this.playerMsg);
+    this.playerMsg = this.playerMsg.trim();
+    if (this.playerMsg !== '') {
+      console.log(`Sending message: ${this.playerMsg}`);
+      this.conn.sendMsg(this.playerID, this.roomJoined!, this.playerMsg);
+    }
+
     this.playerMsg = '';
   }
 
