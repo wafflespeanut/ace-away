@@ -27,9 +27,17 @@
         </v-textarea>
       </template>
     </v-navigation-drawer>
-    <v-app-bar app dense>
-      <v-app-bar-nav-icon v-if="roomJoined && !showTutorial"
-                          @click.stop="drawerOpen = !drawerOpen"></v-app-bar-nav-icon>
+    <v-app-bar app>
+      <v-badge color="red"
+               v-if="roomJoined && !showTutorial"
+               overlap>
+        <template v-slot:badge>
+          <span v-if="unreadMessages > 0">{{ unreadMessages }}</span>
+        </template>
+        <v-btn @click.stop="drawerOpen = !drawerOpen; unreadMessages = 0;" icon>
+          <v-icon large>mdi-comment</v-icon>
+        </v-btn>
+      </v-badge>
       <v-toolbar-title></v-toolbar-title>
       <v-row class="d-flex justify-center">
         <v-slide-y-transition>
@@ -348,6 +356,9 @@ export default class App extends Vue {
   /** Message written by the player. */
   private playerMsg: string = '';
 
+  /** Unread messages since this player has opened the drawer. */
+  private unreadMessages: number = 0;
+
   /** Messages received from the server. */
   private messages: Message[] = [];
 
@@ -580,6 +591,10 @@ export default class App extends Vue {
       content: msg,
       time,
     });
+
+    if (!this.hasFocus || !this.drawerOpen) {
+      this.unreadMessages += 1;
+    }
 
     if (!this.hasFocus && this.canNotify && sender !== this.playerID) {
       const n = new Notification(`Message from ${sender} in room ${this.roomJoined}`, {
