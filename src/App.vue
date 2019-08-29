@@ -65,9 +65,9 @@
                         v-for="(item, i) in table" :key="i + 0"
                         :height="0.9 * cardSize" :width="0.9 * cardSize"
                         :elevation="item.turn ? 8 : 2"
-                        :color="winners.indexOf(item.id) >=0 ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
+                        :color="winners[item.id] ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
                   <div v-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
-                  <div v-else-if="winners.indexOf(item.id) >= 0">[no cards]</div>
+                  <div v-else-if="winners[item.id]">[no cards]</div>
                   <div v-else-if="item.turn">???</div>
                   <div v-else>-</div>
                   <div class="caption">{{ item.id }}</div>
@@ -129,10 +129,10 @@
             </v-item-group>
           </v-col>
         </v-row>
-        <v-overlay opacity="0.5" v-if="overlayMsg !== null">
+        <v-overlay opacity="0.5" v-if="overlayMsgs.length > 0">
           <div>
-            <span class="display-1">{{ overlayMsg }}</span>
-            <v-btn class="mb-4 ml-3" icon color="blue" @click="overlayMsg = null">
+            <span class="display-1">{{ overlayMsgs[0] }}</span>
+            <v-btn class="mb-4 ml-3" icon color="blue" @click="overlayMsgs.splice(0, 1)">
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </div>
@@ -330,7 +330,7 @@ export default class App extends Vue {
   private alertType: string = 'info';
 
   /** Message shown in overlay. */
-  private overlayMsg: string | null = null;
+  private overlayMsgs: string[] = [];
 
   /** Card selected by the player. */
   private selectedCard: Card | null = null;
@@ -433,6 +433,11 @@ export default class App extends Vue {
   private initialize() {
     this.showTutorial = false;
     this.roomJoined = null;
+    this.winners = {};
+    this.previousTurnLength = 0;
+    this.tableLockTime = null;
+    this.cardIndex = null;
+    this.selectedCard = null;
     this.conn = new ConnectionProvider();
 
     this.hand = Object.keys(suiteIndices)
@@ -494,6 +499,8 @@ export default class App extends Vue {
 
   /** A player has joined the room. */
   private playerJoined(resp: ServerMessage<RoomResponse>) {
+    this.roomJoined = resp.room;
+
     resp.response.escaped.forEach((id) => {
       this.winners[id] = true;
     });
@@ -506,10 +513,6 @@ export default class App extends Vue {
         turn: resp.response.turnIdx === i,
       };
     });
-
-    if (resp.player === this.playerID) {
-      this.roomJoined = resp.room;
-    }
 
     // Notify if we're waiting on player(s) joining.
     const diff = resp.response.max - resp.response.players.length;
@@ -622,18 +625,18 @@ export default class App extends Vue {
     const idx = this.table.findIndex((i) => i.id === resp.player);
     this.winners[resp.player] = true;
     if (this.playerID === resp.player) {
-      this.overlayMsg = `Congrats! You've escaped!`;
+      this.overlayMsgs.push(`Congrats! You've escaped!`);
     } else {
-      this.overlayMsg = `${resp.player} escapes.`;
+      this.overlayMsgs.push(`${resp.player} escapes.`);
     }
   }
 
   /** We've been notified that the game has ended. */
   private gameEnded(resp: ServerMessage<{}>) {
     if (this.playerID === resp.player) {
-      this.overlayMsg = `You've got leftover cards. You lose.`;
+      this.overlayMsgs.push(`You've got leftover cards. You lose.`);
     } else {
-      this.overlayMsg = `${resp.player} has leftover card(s) and loses.`;
+      this.overlayMsgs.push(`${resp.player} has leftover card(s) and loses.`);
     }
   }
 

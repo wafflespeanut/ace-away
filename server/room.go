@@ -56,6 +56,7 @@ func (p *Player) removeCard(card Card) bool {
 	}
 
 	if cardIdx >= 0 {
+		// Swap remove.
 		p.hand[cardIdx] = p.hand[len(p.hand)-1]
 		p.hand = p.hand[:len(p.hand)-1]
 		return true
@@ -601,6 +602,9 @@ func (hub *Hub) shareMessage(ws *websocket.Conn, roomID, playerID, msg string) {
 	if !exists {
 		return
 	}
+
+	room.lock.Lock()
+	defer room.lock.Unlock()
 
 	for _, p := range room.players {
 		websocket.JSON.Send(p.conn, &GameMessage{

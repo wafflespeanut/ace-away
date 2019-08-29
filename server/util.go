@@ -43,8 +43,37 @@ var (
 		"A":  14,
 	}
 
-	suites = [...]string{"d", "c", "h", "s"}
+	suites = [...]string{"s", "c", "h", "d"}
 )
+
+// getNextAceCard relative to the given card.
+// This is tossed to the lost player's hand.
+func getNextAceCard(card Card) *Card {
+	for i, suite := range suites {
+		if i == len(suites)-1 {
+			break
+		} else if card.Suite == suite {
+			return &Card{
+				Label: card.Label,
+				Suite: suites[i+1],
+			}
+		}
+	}
+
+	prevLabel := ""
+	for label := range labelRanks {
+		if label == card.Label {
+			return &Card{
+				Label: prevLabel,
+				Suite: "s",
+			}
+		}
+
+		prevLabel = label
+	}
+
+	return nil
+}
 
 // randomDeck contains a shuffled deck of cards.
 func randomDeck() []Card {
