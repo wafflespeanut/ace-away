@@ -151,7 +151,7 @@ import JoinRoom from './dialog/JoinRoom.vue';
 import Tutorial, { TutorialStep } from './dialog/Tutorial.vue';
 import {
   Card, Suite, suitePrettyMap, Label, PlayerCard,
-  GameEvent, suiteIndices, labelRanks,
+  GameEvent, suiteIndices, labelRanks, DealResponse,
 } from './persistence/model';
 import { ClientMessage, RoomCreationRequest, ServerMessage, RoomResponse } from './persistence/model';
 import ConnectionProvider from './persistence/connection';
@@ -161,6 +161,30 @@ import GameEventHub from './persistence';
 const ALLOWED_PLAYERS: number[] = [3, 4, 5, 6];
 const START_ANGLE = Math.PI / 2;
 const TABLE_LOCK_TIME_MS = 5000;
+const TURN_WAIT_MS = 10000;
+
+// All colors from https://vuetifyjs.com/en/styles/colors#material-colors.
+const COLORS = [
+  'indigo',
+  'pink',
+  'light-green',
+  'deep-purple',
+  'grey',
+  'lime',
+  'blue',
+  'light-blue',
+  'blue-grey',
+  'brown',
+  'cyan',
+  'orange',
+  'green',
+  'amber',
+  'yellow',
+  'teal',
+  'red',
+  'purple',
+  'deep-orange',
+];
 
 const iconMap = {
   h: 'mdi-cards-heart',
@@ -230,29 +254,6 @@ function searchSortedIndex<T>(items: T[], newItem: T, compare: (e1: T, e2: T) =>
   return i;
 }
 
-// All colors from https://vuetifyjs.com/en/styles/colors#material-colors.
-const COLORS = [
-  'indigo',
-  'pink',
-  'light-green',
-  'deep-purple',
-  'grey',
-  'lime',
-  'blue',
-  'light-blue',
-  'blue-grey',
-  'brown',
-  'cyan',
-  'orange',
-  'green',
-  'amber',
-  'yellow',
-  'teal',
-  'red',
-  'purple',
-  'deep-orange',
-];
-
 /** Returns the color for a player from known palette using the player ID. */
 function getColorForPlayer(id: string): string {
   const sum = id.split('').reduce((old, value) => old + value.charCodeAt(0), 0);
@@ -271,6 +272,15 @@ export default class App extends Vue {
   /* Internal properties */
 
   private conn: GameEventHub = new ConnectionProvider();
+
+  /** ID of the most recently set timeout for notifying player turn. */
+  private turnNotifyTimeoutId: number = -1;
+
+  /** Whether the player has allowed notifications. */
+  private canNotify: boolean = false;
+
+  /** Whether the user is focusing on the app. */
+  private hasFocus: boolean = false;
 
   /* Constants used by models */
 
@@ -402,10 +412,11 @@ export default class App extends Vue {
 
   private created() {
     this.initialize();
+    this.prepareForNotifications();
     this.addListeners();
   }
 
-  /* Internal methods */
+  /* Init helpers */
 
   /** Initialize this component. Particularly useful to reset this component. */
   private initialize() {
@@ -423,97 +434,208 @@ export default class App extends Vue {
       });
   }
 
+  /** Prepare this view for notifying the player. */
+  private prepareForNotifications() {
+    document.addEventListener('visibilitychange', () => {
+      this.hasFocus = !document.hidden;
+    });
+
+    if (!('Notification' in window)) {
+      console.warn('This browser does not support desktop notifications.');
+      return;
+    }
+
+    if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then((permission) => {
+        this.canNotify = Notification.permission === 'granted';
+      });
+    }
+  }
+
   /* Add event listeners for changing game state on notifications. */
   private addListeners() {
     this.conn.onError(this.showError, true);
+    this.conn.onPlayerJoin(this.playerJoined, true);
+    this.conn.onPlayerTurn(this.handlePlayerTurn, true);
+    this.conn.onPlayerWin(this.playerWon, true);
+    this.conn.onGameOver(this.gameEnded, true);
+    this.conn.onPlayerMsg(this.addMessage, true);
+  }
 
-    this.conn.onPlayerJoin((resp) => {
-      resp.response.escaped.forEach((id) => {
-        this.winners[id] = true;
-      });
+  /* Game events */
 
-      // Set player states.
-      this.table = resp.response.players.map((id, i) => {
-        return {
-          id,
-          card: null,
-          turn: resp.response.turnIdx === i,
-        };
-      });
+  /** Sends the player-selected card to the pile of cards in the table. */
+  private sendToPile() {
+    console.log(`Player placing ${this.selectedCard!.label}${this.prettyMap[this.selectedCard!.suite]}`);
+    this.conn.showCard(this.playerID, this.roomJoined!, this.selectedCard!);
+    this.cardIndex = null;
+  }
 
-      if (resp.player === this.playerID) {
-        this.roomJoined = resp.room;
-      }
+  /** Posts a message to everyone in the room. */
+  private postMessage() {
+    this.playerMsg = this.playerMsg.trim();
+    if (this.playerMsg !== '') {
+      this.conn.sendMsg(this.playerID, this.roomJoined!, this.playerMsg);
+    }
 
-      // Notify if we're waiting on player(s) joining.
-      const diff = resp.response.max - resp.response.players.length;
-      if (diff > 0) {
-        this.alertType = 'info';
-        this.alertMsg = `Waiting for ${diff} more player(s) in room ${resp.room}.`;
-      } else {
-        this.showAlert(`Yay! Let's begin!`);
-      }
-    }, true);
+    this.playerMsg = '';
+  }
 
-    this.conn.onPlayerTurn((resp) => {
-      const previousLength = this.previousTurnLength;
-      const currentLength = resp.response.table.length;
-      this.previousTurnLength = currentLength;
-
-      const updateStuff = () => {
-        // Sort the hand based on suites followed by labels.
-        this.updateHand(resp.response.hand);
-
-        // Reset states of cards in our table (if the table isn't locked).
-        this.table.forEach((v) => {
-          v.card = null;
-          v.turn = v.id === resp.response.turnPlayer;
-        });
-
-        // Get the cards and set them in our table.
-        resp.response.table.forEach((c) => {
-          const idx = this.table.findIndex((v) => v.id === c.id); // This will exist.
-          this.table[idx].card = c.card;
-        });
-      };
-
-      if (currentLength < previousLength) {
-        // If the table is getting cleared, lock the table and
-        // pause for a moment for players to see what happened.
-        // We're fine delaying this turn because we don't allow the
-        // players to place a card in this interval, and so we won't
-        // get any `playerTurn` events.
-        const timeout = this.initiateTableLockdown();
-        setTimeout(() => {
-          this.showAlert('Table cleared');
-          updateStuff();
-        }, timeout);
-      } else {
-        updateStuff();
-      }
-    }, true);
-
-    this.conn.onPlayerWin((resp) => {
-      const idx = this.table.findIndex((i) => i.id === resp.player);
-      this.winners[resp.player] = true;
-      if (this.playerID === resp.player) {
-        this.overlayMsg = `Congrats! You've escaped!`;
-      } else {
-        this.overlayMsg = `${resp.player} escapes.`;
-      }
-    }, true);
-
-    this.conn.onGameOver((resp) => {
-      if (this.playerID === resp.player) {
-        this.overlayMsg = `You've got leftover cards. You lose.`;
-      } else {
-        this.overlayMsg = `${resp.player} has leftover card(s) and loses.`;
-      }
+  /** A player has joined the room. */
+  private playerJoined(resp: ServerMessage<RoomResponse>) {
+    resp.response.escaped.forEach((id) => {
+      this.winners[id] = true;
     });
 
-    this.conn.onPlayerMsg((resp) => {
-      this.addMessage(resp.player, resp.msg);
-    }, true);
+    // Set player states.
+    this.table = resp.response.players.map((id, i) => {
+      return {
+        id,
+        card: null,
+        turn: resp.response.turnIdx === i,
+      };
+    });
+
+    if (resp.player === this.playerID) {
+      this.roomJoined = resp.room;
+    }
+
+    // Notify if we're waiting on player(s) joining.
+    const diff = resp.response.max - resp.response.players.length;
+    if (diff > 0) {
+      this.alertType = 'info';
+      this.alertMsg = `Waiting for ${diff} more player(s) in room ${resp.room}.`;
+    } else {
+      this.showAlert(`Yay! Let's begin!`);
+    }
+  }
+
+  /** A player has made their turn. Prepare for next turn. */
+  private handlePlayerTurn(resp: ServerMessage<DealResponse>) {
+    const previousLength = this.previousTurnLength;
+    const currentLength = resp.response.table.length;
+    this.previousTurnLength = currentLength;
+    clearTimeout(this.turnNotifyTimeoutId);
+
+    const updateStuff = () => {
+      // Sort the hand based on suites followed by labels.
+      this.updateHand(resp.response.hand);
+
+      // Reset states of cards in our table (if the table isn't locked).
+      this.table.forEach((v) => {
+        v.card = null;
+        v.turn = v.id === resp.response.turnPlayer;
+      });
+
+      // Get the cards and set them in our table.
+      resp.response.table.forEach((c) => {
+        const idx = this.table.findIndex((v) => v.id === c.id); // This will exist.
+        this.table[idx].card = c.card;
+      });
+
+      // If it's player's turn, notify them if they haven't played for a while.
+      if (this.canNotify && resp.response.turnPlayer === this.playerID) {
+        this.turnNotifyTimeoutId = setTimeout(() => {
+          if (this.table.findIndex((v) => v.id === this.playerID && v.turn) !== -1) {
+            const n = new Notification(`Your turn!`, {
+              body: `Player(s) are waiting on your turn.`,
+            });
+          }
+        }, TURN_WAIT_MS);
+      }
+    };
+
+    if (currentLength < previousLength) {
+      // If the table is getting cleared, lock the table and
+      // pause for a moment for players to see what happened.
+      // We're fine delaying this turn because we don't allow the
+      // players to place a card in this interval, and so we won't
+      // get any `playerTurn` events.
+      const timeout = this.initiateTableLockdown();
+      setTimeout(() => {
+        this.showAlert('Table cleared');
+        updateStuff();
+      }, timeout);
+    } else {
+      updateStuff();
+    }
+  }
+
+  /** Adds incoming message from the server and notifies player if needed. */
+  private addMessage(resp: ServerMessage<{}>) {
+    const sender = resp.player;
+    const msg = resp.msg;
+
+    const date = new Date();
+    let hours = String(date.getHours());
+    hours = ('00' + hours).substring(hours.length);
+    let mins = String(date.getMinutes());
+    mins = ('00' + mins).substring(mins.length);
+    const time = `${hours}:${mins}`;
+    const color = getColorForPlayer(sender);
+
+    this.messages.push({
+      color,
+      sender: sender === this.playerID ? 'You' : sender,
+      content: msg,
+      time,
+    });
+
+    if (!this.hasFocus && this.canNotify && sender !== this.playerID) {
+      const n = new Notification(`Message from ${sender} in room ${this.roomJoined}`, {
+        body: msg,
+      });
+    }
+
+    // Offer gracious amount of time to render.
+    setTimeout(() => {
+      let el: any;
+      if (this.$refs.lastMessage instanceof Array && this.$refs.lastMessage.length > 0) {
+        el = this.$refs.lastMessage[0];
+      }
+
+      if (el.$el !== undefined) {
+        el = el.$el;
+      }
+
+      el.scrollIntoView();
+    }, 500);
+  }
+
+  /** We've been notified that some player has ditched all their cards. */
+  private playerWon(resp: ServerMessage<{}>) {
+    const idx = this.table.findIndex((i) => i.id === resp.player);
+    this.winners[resp.player] = true;
+    if (this.playerID === resp.player) {
+      this.overlayMsg = `Congrats! You've escaped!`;
+    } else {
+      this.overlayMsg = `${resp.player} escapes.`;
+    }
+  }
+
+  /** We've been notified that the game has ended. */
+  private gameEnded(resp: ServerMessage<{}>) {
+    if (this.playerID === resp.player) {
+      this.overlayMsg = `You've got leftover cards. You lose.`;
+    } else {
+      this.overlayMsg = `${resp.player} has leftover card(s) and loses.`;
+    }
+  }
+
+  /** Sets the snackbar message. */
+  private showError(msg: string) {
+    this.notification = msg;
+  }
+
+  /* Helper methods */
+
+  /** Shows alert as an alert notification in the app bar. */
+  private showAlert(msg: string, ty: string = 'success') {
+    this.alertType = ty;
+    this.alertMsg = msg;
+    setTimeout(() => {
+      this.alertMsg = null;
+    }, 3000);
   }
 
   /**
@@ -601,23 +723,6 @@ export default class App extends Vue {
     }, timeout ? timeout : 50);
   }
 
-  /** Sends the player-selected card to the pile of cards in the table. */
-  private sendToPile() {
-    console.log(`Player placing ${this.selectedCard!.label}${this.prettyMap[this.selectedCard!.suite]}`);
-    this.conn.showCard(this.playerID, this.roomJoined!, this.selectedCard!);
-    this.cardIndex = null;
-  }
-
-  /** Posts a message to everyone in the room. */
-  private postMessage() {
-    this.playerMsg = this.playerMsg.trim();
-    if (this.playerMsg !== '') {
-      this.conn.sendMsg(this.playerID, this.roomJoined!, this.playerMsg);
-    }
-
-    this.playerMsg = '';
-  }
-
   /** Player has requested for a tutorial. */
   private beginTutorial() {
     this.showTutorial = true;
@@ -635,53 +740,7 @@ export default class App extends Vue {
   /** Player has ended the tutorial. */
   private endTutorial() {
     this.initialize();
-    // NOTE: We shouldn't add listeners again here. Guess why!
-  }
-
-  /** Shows alert as an alert notification in the app bar. */
-  private showAlert(msg: string, ty: string = 'success') {
-    this.alertType = ty;
-    this.alertMsg = msg;
-    setTimeout(() => {
-      this.alertMsg = null;
-    }, 3000);
-  }
-
-  /** Adds incoming message from the server. */
-  private addMessage(sender: string, msg: string) {
-    const date = new Date();
-    let hours = String(date.getHours());
-    hours = ('00' + hours).substring(hours.length);
-    let mins = String(date.getMinutes());
-    mins = ('00' + mins).substring(mins.length);
-    const time = `${hours}:${mins}`;
-    const color = getColorForPlayer(sender);
-
-    this.messages.push({
-      color,
-      sender: sender === this.playerID ? 'You' : sender,
-      content: msg,
-      time,
-    });
-
-    // Offer gracious amount of time to render.
-    setTimeout(() => {
-      let el: any;
-      if (this.$refs.lastMessage instanceof Array && this.$refs.lastMessage.length > 0) {
-        el = this.$refs.lastMessage[0];
-      }
-
-      if (el.$el !== undefined) {
-        el = el.$el;
-      }
-
-      el.scrollIntoView();
-    }, 500);
-  }
-
-  /** Sets the snackbar message. */
-  private showError(msg: string) {
-    this.notification = msg;
+    // NOTE: We shouldn't add listeners again here (ConnectionProvider uses statics).
   }
 }
 export { ALLOWED_PLAYERS };
