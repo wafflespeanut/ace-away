@@ -595,7 +595,7 @@ export default class App extends Vue {
       time,
     });
 
-    if (!this.hasFocus || !this.drawerOpen) {
+    if (sender !== this.playerID && (!this.hasFocus || !this.drawerOpen)) {
       this.unreadMessages += 1;
     }
 

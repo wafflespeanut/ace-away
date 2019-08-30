@@ -228,6 +228,46 @@ func TestOnePlayerExited(t *testing.T) {
 	assert.EqualValues(room.currentTurn, 1)
 }
 
+func TestGameAceCards(t *testing.T) {
+	assert := assert.New(t)
+	room, _ := setup3PlayerRoom([]string{"[]", "[]", "[{\"label\":\"5\",\"suite\":\"s\"}]"})
+
+	assert.Nil(room.previousAcePlayer)
+	assert.Empty(room.acePlayerCollection)
+	p3 := room.players["player3"]
+	room.endRound()
+
+	room.startGame()
+	assert.Equal(room.acePlayerCollection, []Card{aceSpade})
+	assert.EqualValues(2, room.previousAcePlayer.index)
+	assert.EqualValues(aceSpade, p3.hand[0])
+	assert.EqualValues(2, room.currentTurn)
+	assert.True(p3.dealer)
+
+	p1, p2 := room.players["player1"], room.players["player2"]
+	for r := 0; r < 5; r++ {
+		p1.hand, p2.hand, p3.hand = []Card{}, []Card{}, []Card{Card{"10", "s"}}
+		room.startGame()
+		assert.True(p3.dealer)
+	}
+
+	assert.Equal([]Card{
+		aceSpade, Card{"A", "c"}, Card{"A", "h"}, Card{"A", "d"}, Card{"K", "s"}, Card{"K", "c"},
+	}, room.acePlayerCollection)
+
+	// New player gets ace. Ace cards get reset.
+	p1.hand, p2.hand, p3.hand = []Card{Card{"2", "h"}}, []Card{}, []Card{Card{}}
+	room.endRound()
+	assert.False(p1.exited)
+
+	room.startGame()
+	assert.Equal([]Card{aceSpade}, room.acePlayerCollection)
+	assert.EqualValues(0, room.previousAcePlayer.index)
+	assert.EqualValues(aceSpade, p1.hand[0])
+	assert.EqualValues(0, room.currentTurn)
+	assert.True(p1.dealer)
+}
+
 func setup3PlayerRoom(hands []string) (*Room, *Hub) {
 	room := &Room{
 		players: map[string]*Player{},

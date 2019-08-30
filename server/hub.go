@@ -155,6 +155,8 @@ func (hub *Hub) serve(ws *websocket.Conn) {
 			responseErr = hub.validateAndApplyTurn(ws, roomID, playerID, msg.Data)
 		} else if msg.Event == eventPlayerMsg {
 			hub.shareMessage(ws, roomID, playerID, msg.Msg)
+		} else if msg.Event == eventNewGameRequest {
+
 		}
 
 		if responseErr != nil {

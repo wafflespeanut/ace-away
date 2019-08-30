@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 )
 
@@ -60,27 +61,37 @@ func getNextAceCard(card Card) *Card {
 		}
 	}
 
-	prevLabel := ""
-	for label := range labelRanks {
-		if label == card.Label {
+	rank := labelRanks[card.Label] - 1
+	for label, r := range labelRanks {
+		if rank == r {
 			return &Card{
-				Label: prevLabel,
+				Label: label,
 				Suite: "s",
 			}
 		}
-
-		prevLabel = label
 	}
 
 	return nil
 }
 
-// randomDeck contains a shuffled deck of cards.
-func randomDeck() []Card {
+// cardDeck takes a bunch of cards, adds them to the deck and then adds
+// the remaining cards to that deck.
+func cardDeck(skipCards []Card) []Card {
 	deck := make([]Card, len(labelRanks)*len(suites))
-	i := 0
+	toSkip := make(map[string]struct{})
+	for i, c := range skipCards {
+		deck[i] = c
+		toSkip[fmt.Sprintf("%s%s", c.Label, c.Suite)] = struct{}{}
+	}
+
+	i := len(skipCards)
 	for _, s := range suites {
 		for l := range labelRanks {
+			_, exists := toSkip[fmt.Sprintf("%s%s", l, s)]
+			if exists {
+				continue
+			}
+
 			deck[i] = Card{
 				Label: l,
 				Suite: s,
@@ -89,17 +100,33 @@ func randomDeck() []Card {
 		}
 	}
 
-	rand.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
 	return deck
 }
 
 // randomDeckChunks shuffles a deck, distributes the cards for the
-// given number of players and returns the collection.
-func randomDeckChunks(numHands uint8) [][]Card {
+// given number of players and returns the collection. It also takes
+// a bunch of cards which are added to the first chunk.
+func randomDeckChunks(numHands uint8, aceCards []Card) [][]Card {
 	n := int(numHands)
-	deck := randomDeck()
+	deck := cardDeck(aceCards)
 	perHand := len(deck) / n
 	extra := len(deck) % n
+
+	// The first chunk is the one which gets the high rank cards.
+	offset := perHand
+	if extra > 0 {
+		offset++
+	}
+
+	if len(aceCards) < offset {
+		offset = len(aceCards)
+	}
+
+	// Shuffle everything other than the high rank cards.
+	shuffleLen := len(deck) - offset
+	rand.Shuffle(shuffleLen, func(i, j int) {
+		deck[i+offset], deck[j+offset] = deck[j+offset], deck[i+offset]
+	})
 
 	start := 0
 	hands := make([][]Card, n)

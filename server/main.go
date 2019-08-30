@@ -33,6 +33,8 @@ const (
 	eventPlayerWins = "PlayerWin"
 	// Player has sent a message.
 	eventPlayerMsg = "PlayerMsg"
+	// Player has requested for a new game.
+	eventNewGameRequest = "GameRestart"
 
 	minPlayers = 3
 	maxPlayers = 6

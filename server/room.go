@@ -89,6 +89,15 @@ type Room struct {
 	limit uint8
 	// Table containing player IDs and their cards for this round.
 	table []PlayerCard
+	// The player who lost in the previous round.
+	previousAcePlayer *Player
+	// If the player who lost in the previous round loses again,
+	// then the start accumulating high rank cards. This is reset
+	// when another player loses.
+	acePlayerCollection []Card
+	// Number of players who have issued a request for restarting the game.
+	// If majority have, then a restart is issued.
+	restartRequests uint8
 }
 
 // `debugString` for `Room`.
@@ -111,8 +120,8 @@ func (r *Room) endRound() string {
 
 	r.table = make([]PlayerCard, 0)
 	for id, p := range r.players {
-		if len(p.hand) == 0 && !p.exited {
-			p.exited = true
+		p.exited = len(p.hand) == 0
+		if p.exited {
 			playerID = id
 		}
 	}
@@ -255,6 +264,58 @@ func (r *Room) matchesSuite(card Card) bool {
 	}
 
 	return matches
+}
+
+// startGame begins a new game and deals all players.
+// If this room has an ongoing game, then it finds the player
+// who hasn't "exited", and hands them high rank card(s) depending
+// on how many times they've lost.
+func (r *Room) startGame() {
+	var acePlayer *Player
+	for _, p := range r.players {
+		if !p.exited {
+			acePlayer = p
+			break
+		}
+	}
+
+	aceExistedBefore := r.previousAcePlayer != nil
+	aceExistsNow := acePlayer != nil
+	isAcePlayerNew := aceExistedBefore && aceExistsNow && r.previousAcePlayer.index != acePlayer.index
+
+	if aceExistsNow {
+		if !aceExistedBefore || isAcePlayerNew {
+			// If we have an ace and if it's either first time or it's for a different player,
+			// then reset with an ace spade.
+			r.acePlayerCollection = []Card{aceSpade}
+		} else if aceExistedBefore && !isAcePlayerNew {
+			// If it's the same player getting an ace, then whack them with another high card.
+			nextCard := getNextAceCard(r.acePlayerCollection[len(r.acePlayerCollection)-1])
+			if nextCard != nil {
+				r.acePlayerCollection = append(r.acePlayerCollection, *nextCard)
+			}
+		}
+
+		r.previousAcePlayer = acePlayer
+	}
+
+	hands := randomDeckChunks(r.limit, r.acePlayerCollection)
+	if aceExistsNow {
+		// This ensures that the lost player gets the high rank card(s) again.
+		hands[0], hands[acePlayer.index] = hands[acePlayer.index], hands[0]
+	}
+
+	for _, p := range r.players {
+		p.hand = hands[p.index]
+		// If player has a spade ace, then they're the dealer.
+		for _, card := range p.hand {
+			if card.Label == aceSpade.Label && card.Suite == aceSpade.Suite {
+				p.dealer = true
+				r.currentTurn = p.index
+				break
+			}
+		}
+	}
 }
 
 // dealConnectedPlayers through the given WS connection.
@@ -443,7 +504,6 @@ func (hub *Hub) applyPlayerTurn(room *Room, playerID string, card Card) (turnEff
 // Adds player to a room. The room must exist at this point. Also does some sanity
 // checks to ensure that some player cannot override someone else's stuff.
 func (hub *Hub) addPlayer(ws *websocket.Conn, roomID, playerID string) *HandlerError {
-	swapPlayer := ""
 	room, exists := hub.getRoom(roomID)
 	if !exists {
 		return &HandlerError{
@@ -454,6 +514,14 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID, playerID string) *HandlerE
 
 	room.lock.Lock()
 	defer room.lock.Unlock()
+
+	return hub.addPlayerToUnlockedRoom(ws, room, roomID, playerID)
+}
+
+// addPlayerToUnlockedRoom accepts an unlocked room and does whatever `addPlayer` method says.
+// The method has been split so as to avoid a possible race condition.
+func (hub *Hub) addPlayerToUnlockedRoom(ws *websocket.Conn, room *Room, roomID, playerID string) *HandlerError {
+	swapPlayer := ""
 
 	if room.isFull() {
 		oldID, oldPlayer := room.forgottenPlayer()
@@ -470,7 +538,7 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID, playerID string) *HandlerE
 
 	hub.setConnection(ws, roomID)
 
-	_, exists = room.players[playerID]
+	_, exists := room.players[playerID]
 	if exists && swapPlayer == "" {
 		return &HandlerError{
 			Msg:   fmt.Sprintf("Player %s already exists in room %s. Choose a different name.", playerID, roomID),
@@ -511,34 +579,10 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID, playerID string) *HandlerE
 		room.dealConnectedPlayers(ws)
 	} else if room.isFull() {
 		log.Printf("Room %s is full. Starting a new game.\n", roomID)
-		return hub.startGame(ws, room)
+		room.startGame()
+		room.dealConnectedPlayers(ws)
 	}
 
-	return nil
-}
-
-// startGame begins a new game and deals all players.
-//
-// **NOTE:** The caller is responsible for synchronizing access to room pointer.
-func (hub *Hub) startGame(ws *websocket.Conn, room *Room) *HandlerError {
-	hands := randomDeckChunks(room.limit)
-	playerIdx := 0
-
-	for _, p := range room.players {
-		p.hand = hands[playerIdx]
-		// If player has a spade ace, then they're the dealer.
-		for _, card := range p.hand {
-			if card.Label == aceSpade.Label && card.Suite == aceSpade.Suite {
-				p.dealer = true
-				room.currentTurn = p.index
-				break
-			}
-		}
-
-		playerIdx++
-	}
-
-	room.dealConnectedPlayers(ws)
 	return nil
 }
 
@@ -551,6 +595,8 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID, playerID string
 			continue
 		} else if exists {
 			room.lock.Lock()
+			defer room.lock.Unlock()
+
 			if room.isFull() {
 				_, oldPlayer := room.forgottenPlayer()
 				if oldPlayer == nil {
@@ -561,8 +607,7 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID, playerID string
 				}
 			}
 
-			room.lock.Unlock()
-			return hub.addPlayer(ws, roomID, playerID)
+			return hub.addPlayerToUnlockedRoom(ws, room, roomID, playerID)
 		} else {
 			break
 		}
@@ -583,13 +628,18 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID, playerID string
 	}
 
 	room := &Room{
-		players: make(map[string]*Player),
-		limit:   req.Players,
-		table:   make([]PlayerCard, 0),
+		players:             make(map[string]*Player),
+		limit:               req.Players,
+		table:               make([]PlayerCard, 0),
+		acePlayerCollection: make([]Card, 0),
 	}
 
 	hub.setRoom(roomID, room)
-	return hub.addPlayer(ws, roomID, playerID)
+
+	room.lock.Lock()
+	defer room.lock.Unlock()
+
+	return hub.addPlayerToUnlockedRoom(ws, room, roomID, playerID)
 }
 
 // shareMessage from one player to everyone in the room (including the player).
