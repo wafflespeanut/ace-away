@@ -46,7 +46,10 @@
                     :type="alertType" elevation="2">{{ alertMsg }}</v-alert>
         </v-slide-y-transition>
       </v-row>
-      <v-btn :disabled="showTutorial" icon @click="beginTutorial">
+      <v-btn :disabled="roomJoined === null" @click="restartRequest = true" icon>
+        <v-icon large>mdi-restart</v-icon>
+      </v-btn>
+      <v-btn :disabled="true" icon @click="beginTutorial">
         <v-icon>mdi-help-circle-outline</v-icon>
       </v-btn>
     </v-app-bar>
@@ -138,6 +141,10 @@
           </div>
         </v-overlay>
       </v-container>
+      <RequestRestart :showDialog="restartRequest"
+                      :fromPlayer="restartRequestees ? restartRequestees[restartRequestees.length - 1] : null"
+                      @cancel="restartRequest = false"
+                      @request="requestGameRestart" />
       <JoinRoom @player-set="v => playerID = v" :players="allowedPlayers" :showDialog="roomJoined === null" />
       <Tutorial @close="endTutorial"
                 @tutorial-step="stepTutorial"
@@ -156,6 +163,7 @@ import Vue from 'vue';
 import Component from 'vue-class-component';
 
 import JoinRoom from './dialog/JoinRoom.vue';
+import RequestRestart from './dialog/RequestRestart.vue';
 import Tutorial, { TutorialStep } from './dialog/Tutorial.vue';
 import {
   Card, Suite, suitePrettyMap, Label, PlayerCard,
@@ -272,6 +280,7 @@ function getColorForPlayer(id: string): string {
 @Component({
   components: {
     JoinRoom,
+    RequestRestart,
     Tutorial,
   },
 })
@@ -313,6 +322,12 @@ export default class App extends Vue {
   private readonly playerID: string = '';
 
   /* Models */
+
+  /** Whether the modal should be shown for player to issue a restart request */
+  private restartRequest: boolean = false;
+
+  /** Players who've requested restarts. */
+  private restartRequestees: string[] = [];
 
   /** Whether the player has opened tutorial. */
   private showTutorial: boolean = false;
@@ -476,6 +491,23 @@ export default class App extends Vue {
     this.conn.onPlayerWin(this.playerWon, true);
     this.conn.onGameOver(this.gameEnded, true);
     this.conn.onPlayerMsg(this.addMessage, true);
+    this.conn.onGameRestart((resp) => {
+      // This will automatically initiate a cooldown for refreshing the table.
+      this.previousTurnLength = Number.POSITIVE_INFINITY;
+      this.initialize();
+    });
+
+    this.conn.onGameRequest((resp) => {
+      const idx = this.restartRequestees.findIndex((id) => id === resp.player);
+      if (idx >= 0) {
+        this.restartRequestees.splice(idx, 1);
+      }
+
+      this.restartRequestees.push(resp.player);
+      if (this.restartRequestees.findIndex((id) => id === this.playerID) === -1) {
+        this.restartRequest = true;
+      }
+    }, true);
   }
 
   /* Game events */
@@ -638,6 +670,11 @@ export default class App extends Vue {
     } else {
       this.overlayMsgs.push(`${resp.player} has leftover card(s) and loses.`);
     }
+  }
+
+  private requestGameRestart() {
+    this.restartRequest = false;
+    this.conn.requestNewGmae(this.playerID, this.roomJoined!);
   }
 
   /** Sets the snackbar message. */

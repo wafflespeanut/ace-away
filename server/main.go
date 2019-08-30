@@ -34,7 +34,9 @@ const (
 	// Player has sent a message.
 	eventPlayerMsg = "PlayerMsg"
 	// Player has requested for a new game.
-	eventNewGameRequest = "GameRestart"
+	eventNewGameRequest = "GameRestartRequest"
+	// Server has agreed to restart the game.
+	eventGameRestart = "GameRestart"
 
 	minPlayers = 3
 	maxPlayers = 6

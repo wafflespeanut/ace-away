@@ -37,6 +37,8 @@ type Player struct {
 	// Whether this player has exited this room after getting rid
 	// of all of their cards.
 	exited bool
+	// Whether this player has requested a restart.
+	requestedRestart bool
 }
 
 // debugString for `Player`
@@ -95,9 +97,6 @@ type Room struct {
 	// then the start accumulating high rank cards. This is reset
 	// when another player loses.
 	acePlayerCollection []Card
-	// Number of players who have issued a request for restarting the game.
-	// If majority have, then a restart is issued.
-	restartRequests uint8
 }
 
 // `debugString` for `Room`.
@@ -120,8 +119,8 @@ func (r *Room) endRound() string {
 
 	r.table = make([]PlayerCard, 0)
 	for id, p := range r.players {
-		p.exited = len(p.hand) == 0
-		if p.exited {
+		if len(p.hand) == 0 && !p.exited {
+			p.exited = true
 			playerID = id
 		}
 	}
@@ -266,21 +265,35 @@ func (r *Room) matchesSuite(card Card) bool {
 	return matches
 }
 
+// Number of players who have issued a request for restarting the game.
+// If majority have, then a restart is issued.
+func (r *Room) restartRequests() uint8 {
+	count := uint8(0)
+	for _, p := range r.players {
+		if p.requestedRestart {
+			count++
+		}
+	}
+
+	return count
+}
+
 // startGame begins a new game and deals all players.
 // If this room has an ongoing game, then it finds the player
 // who hasn't "exited", and hands them high rank card(s) depending
 // on how many times they've lost.
 func (r *Room) startGame() {
+	aceCount := 0
 	var acePlayer *Player
 	for _, p := range r.players {
 		if !p.exited {
+			aceCount++
 			acePlayer = p
-			break
 		}
 	}
 
 	aceExistedBefore := r.previousAcePlayer != nil
-	aceExistsNow := acePlayer != nil
+	aceExistsNow := acePlayer != nil && aceCount == 1
 	isAcePlayerNew := aceExistedBefore && aceExistsNow && r.previousAcePlayer.index != acePlayer.index
 
 	if aceExistsNow {
@@ -300,12 +313,14 @@ func (r *Room) startGame() {
 	}
 
 	hands := randomDeckChunks(r.limit, r.acePlayerCollection)
-	if aceExistsNow {
+	if aceExistsNow || aceExistedBefore {
+		idx := r.previousAcePlayer.index
 		// This ensures that the lost player gets the high rank card(s) again.
-		hands[0], hands[acePlayer.index] = hands[acePlayer.index], hands[0]
+		hands[0], hands[idx] = hands[idx], hands[0]
 	}
 
 	for _, p := range r.players {
+		p.exited = false
 		p.hand = hands[p.index]
 		// If player has a spade ace, then they're the dealer.
 		for _, card := range p.hand {
@@ -323,6 +338,8 @@ func (r *Room) startGame() {
 func (r *Room) dealConnectedPlayers(ws *websocket.Conn) {
 	var turnPlayerID string
 	for playerID, p := range r.players {
+		// Reset restart request for players.
+		p.requestedRestart = false
 		if p.index == r.currentTurn {
 			turnPlayerID = playerID
 		}
@@ -664,4 +681,51 @@ func (hub *Hub) shareMessage(ws *websocket.Conn, roomID, playerID, msg string) {
 			Msg:    msg,
 		})
 	}
+}
+
+// playerRequestedNewGame broadcasts the request to all players and starts
+// a new game if majority have agreed.
+func (hub *Hub) playerRequestedNewGame(ws *websocket.Conn, roomID, playerID string) *HandlerError {
+	room, exists := hub.getRoom(roomID)
+	if !exists {
+		return &HandlerError{
+			Msg: fmt.Sprintf("Invalid room specified."),
+		}
+	}
+
+	room.lock.Lock()
+	defer room.lock.Unlock()
+
+	player, exists := room.players[playerID]
+	if !exists || player.requestedRestart {
+		return &HandlerError{
+			Msg: fmt.Sprintf("You're not allowed to perform this action."),
+		}
+	}
+
+	player.requestedRestart = true
+	for _, p := range room.players {
+		websocket.JSON.Send(p.conn, &GameMessage{
+			Player: playerID,
+			Room:   roomID,
+			Event:  eventNewGameRequest,
+		})
+	}
+
+	if room.restartRequests() <= uint8(len(room.players)/2) {
+		return nil
+	}
+
+	log.Printf("Majority of the players in room %s have requested for a restart.", roomID)
+	for id, p := range room.players {
+		websocket.JSON.Send(p.conn, &GameMessage{
+			Player: id,
+			Room:   roomID,
+			Event:  eventGameRestart,
+		})
+	}
+
+	room.startGame()
+	room.dealConnectedPlayers(ws)
+	return nil
 }

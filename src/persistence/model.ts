@@ -49,6 +49,8 @@ enum GameEvent {
   playerMsg = 'PlayerMsg',
   playerWins = 'PlayerWin',
   gameOver = 'GameOver',
+  gameRestart = 'GameRestart',
+  restartRequest = 'GameRestartRequest',
 }
 
 interface PlayerCard {

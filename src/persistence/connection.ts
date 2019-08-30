@@ -57,6 +57,15 @@ export default class ConnectionProvider implements GameEventHub {
     });
   }
 
+  public requestNewGmae(playerId: string, roomName: string) {
+    this.sendMessage({
+      player: playerId,
+      room: roomName,
+      event: GameEvent.restartRequest,
+      data: {},
+    });
+  }
+
   public sendMsg(playerId: string, roomName: string, msg: string) {
     this.sendMessage({
       player: playerId,
@@ -85,6 +94,14 @@ export default class ConnectionProvider implements GameEventHub {
 
   public onGameOver(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
     this.onEvent(GameEvent.gameOver, callback, persist);
+  }
+
+  public onGameRequest(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
+    this.onEvent(GameEvent.restartRequest, callback, persist);
+  }
+
+  public onGameRestart(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
+    this.onEvent(GameEvent.gameRestart, callback, persist);
   }
 
   public onError(callback: (msg: string, event: GameEvent) => void, persist?: boolean) {

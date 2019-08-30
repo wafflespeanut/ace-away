@@ -27,6 +27,10 @@ export default class TutorialProvider implements GameEventHub {
     //
   }
 
+  public requestNewGmae(playerId: string, roomName: string) {
+    //
+  }
+
   public onPlayerJoin(callback: (resp: ServerMessage<RoomResponse>) => void, persist?: boolean) {
     this.onEvent(GameEvent.playerJoin, callback, persist);
   }
@@ -44,6 +48,14 @@ export default class TutorialProvider implements GameEventHub {
   }
 
   public onGameOver(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
+    //
+  }
+
+  public onGameRequest(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
+    //
+  }
+
+  public onGameRestart(callback: (resp: ServerMessage<{}>) => void, persist?: boolean) {
     //
   }
 

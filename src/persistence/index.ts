@@ -27,6 +27,8 @@ export default interface GameEventHub {
      */
     showCard(playerId: string, roomName: string, card: Card): void;
 
+    requestNewGmae(playerId: string, roomName: string): void;
+
     /**
      * Submits the player's message to other players.
      *
@@ -81,4 +83,8 @@ export default interface GameEventHub {
      * @param persist Whether to persist that callback or destroy it after the first call.
      */
     onGameOver(callback: (resp: ServerMessage<{}>) => void, persist?: boolean): void;
+
+    onGameRequest(callback: (resp: ServerMessage<{}>) => void, persist?: boolean): void;
+
+    onGameRestart(callback: (resp: ServerMessage<{}>) => void, persist?: boolean): void;
 }

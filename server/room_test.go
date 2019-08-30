@@ -236,7 +236,6 @@ func TestGameAceCards(t *testing.T) {
 	assert.Empty(room.acePlayerCollection)
 	p3 := room.players["player3"]
 	room.endRound()
-
 	room.startGame()
 	assert.Equal(room.acePlayerCollection, []Card{aceSpade})
 	assert.EqualValues(2, room.previousAcePlayer.index)
@@ -247,6 +246,7 @@ func TestGameAceCards(t *testing.T) {
 	p1, p2 := room.players["player1"], room.players["player2"]
 	for r := 0; r < 5; r++ {
 		p1.hand, p2.hand, p3.hand = []Card{}, []Card{}, []Card{Card{"10", "s"}}
+		room.endRound()
 		room.startGame()
 		assert.True(p3.dealer)
 	}
@@ -256,10 +256,23 @@ func TestGameAceCards(t *testing.T) {
 	}, room.acePlayerCollection)
 
 	// New player gets ace. Ace cards get reset.
-	p1.hand, p2.hand, p3.hand = []Card{Card{"2", "h"}}, []Card{}, []Card{Card{}}
-	room.endRound()
-	assert.False(p1.exited)
+	p1.hand, p2.hand, p3.hand = []Card{Card{"2", "h"}}, []Card{}, []Card{}
+	p1.exited = false
+	p2.exited = true
+	p3.exited = true
+	room.startGame()
+	assert.Equal([]Card{aceSpade}, room.acePlayerCollection)
+	assert.EqualValues(0, room.previousAcePlayer.index)
+	assert.EqualValues(aceSpade, p1.hand[0])
+	assert.EqualValues(0, room.currentTurn)
+	assert.True(p1.dealer)
 
+	// Multiple players have cards. Don't mark player as ace, but
+	// leave previous state undisturbed.
+	p1.hand, p2.hand, p3.hand = []Card{}, []Card{Card{"2", "h"}}, []Card{Card{"3", "d"}}
+	p1.exited = true
+	p2.exited = false
+	p3.exited = false
 	room.startGame()
 	assert.Equal([]Card{aceSpade}, room.acePlayerCollection)
 	assert.EqualValues(0, room.previousAcePlayer.index)
