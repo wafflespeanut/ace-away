@@ -114,18 +114,18 @@ func (r *Room) debugString() string {
 // endRound in this room by clearing the table. If a player
 // doesn't have any card in their hand, then the player is marked
 // "exited" and their ID is returned.
-func (r *Room) endRound() string {
-	playerID := ""
+func (r *Room) endRound() []string {
+	playerIDs := make([]string, 0)
 
 	r.table = make([]PlayerCard, 0)
 	for id, p := range r.players {
 		if len(p.hand) == 0 && !p.exited {
 			p.exited = true
-			playerID = id
+			playerIDs = append(playerIDs, id)
 		}
 	}
 
-	return playerID
+	return playerIDs
 }
 
 // tableReachedLimit returns whether the table has cards from all players
@@ -278,11 +278,12 @@ func (r *Room) restartRequests() uint8 {
 	return count
 }
 
-// startGame begins a new game and deals all players.
+// startGame clears the table, begins a new game and deals all players.
 // If this room has an ongoing game, then it finds the player
 // who hasn't "exited", and hands them high rank card(s) depending
 // on how many times they've lost.
 func (r *Room) startGame() {
+	r.table = make([]PlayerCard, 0)
 	aceCount := 0
 	var acePlayer *Player
 	for _, p := range r.players {
@@ -327,7 +328,6 @@ func (r *Room) startGame() {
 			if card.Label == aceSpade.Label && card.Suite == aceSpade.Suite {
 				p.dealer = true
 				r.currentTurn = p.index
-				break
 			}
 		}
 	}
@@ -406,16 +406,23 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID, playerID string
 		// Notify players before clearing the table.
 		room.dealConnectedPlayers(ws)
 		// log.Println("Table reached limit. Setting dealer for next round.")
-		winnerID := room.endRound()
+		winnerIDs := room.endRound()
 		// Broadcast winning message to all players at the end of a round.
-		if winnerID != "" {
-			for _, p := range room.players {
-				websocket.JSON.Send(p.conn, &GameMessage{
-					Player: winnerID,
-					Room:   p.roomID,
-					Event:  eventPlayerWins,
-				})
+		if len(winnerIDs) > 0 {
+			for _, winnerID := range winnerIDs {
+				for _, p := range room.players {
+					websocket.JSON.Send(p.conn, &GameMessage{
+						Player: winnerID,
+						Room:   p.roomID,
+						Event:  eventPlayerWins,
+					})
+				}
 			}
+		}
+
+		// By the end of each round, check if the game has ended.
+		if room.nextPlayerWithHand(room.currentTurn) == nil {
+			turnEffect = gameEnds
 		}
 	}
 
@@ -423,10 +430,16 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID, playerID string
 
 	// If game has ended, broadcast victim's losing to all players.
 	if turnEffect == gameEnds {
+		// There could be multiple winners, in which case, `victimID` would be an empty string.
 		var victimID string
 		for id, p := range room.players {
 			if len(p.hand) > 0 {
 				victimID = id
+			} else {
+				// Set the exit status of players without any cards. This is an off-by-one
+				// case which happens when the last turn involves a player dumping their
+				// last card to their opponent and winning the game.
+				p.exited = true
 			}
 		}
 

@@ -145,7 +145,7 @@ func TestOnePlayerExiting(t *testing.T) {
 		if i == 2 {
 			assert.EqualValues(effect, tableFull)
 			winner := room.endRound()
-			assert.Equal(winner, "player3")
+			assert.Equal(winner, []string{"player3"})
 		} else {
 			assert.EqualValues(effect, turnApplied)
 		}
@@ -183,7 +183,7 @@ func TestOnePlayerCaughtWhileExiting(t *testing.T) {
 		assert.Nil(err)
 		if i == 2 {
 			winnerID := room.endRound()
-			assert.Equal(winnerID, "")
+			assert.Empty(winnerID)
 			assert.EqualValues(effect, tableFull)
 		} else {
 			assert.EqualValues(effect, turnApplied)

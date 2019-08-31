@@ -68,9 +68,9 @@
                         v-for="(item, i) in table" :key="i + 0"
                         :height="0.9 * cardSize" :width="0.9 * cardSize"
                         :elevation="item.turn ? 8 : 2"
-                        :color="winners[item.id] ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
+                        :color="winners.indexOf(item.id) >= 0 ? 'green darken-3' : (item.turn ? 'cyan darken-3' : '' )">
                   <div v-if="item.card" class="headline">{{ item.card.label }} {{ prettyMap[item.card.suite] }}</div>
-                  <div v-else-if="winners[item.id]">[no cards]</div>
+                  <div v-else-if="winners.indexOf(item.id) >= 0">[no cards]</div>
                   <div v-else-if="item.turn">???</div>
                   <div v-else>-</div>
                   <div class="caption">{{ item.id }}</div>
@@ -360,7 +360,7 @@ export default class App extends Vue {
   private table: TableItem[] = [];
 
   /** Winners in this room. */
-  private winners: { [s: string]: boolean; } = {};
+  private winners: string[] = [];
 
   /** Number of cards in table in the previous round */
   private previousTurnLength: number = 0;
@@ -437,18 +437,17 @@ export default class App extends Vue {
   /* Vue methods */
 
   private created() {
-    this.initialize();
+    this.resetGameState();
     this.prepareForNotifications();
     this.addListeners();
   }
 
   /* Init helpers */
 
-  /** Initialize this component. Particularly useful to reset this component. */
-  private initialize() {
+  /** Reset the game state in this component. */
+  private resetGameState() {
     this.showTutorial = false;
-    this.roomJoined = null;
-    this.winners = {};
+    this.winners = [];
     this.previousTurnLength = 0;
     this.tableLockTime = null;
     this.cardIndex = null;
@@ -463,6 +462,10 @@ export default class App extends Vue {
           labels: [],
         };
       });
+
+    this.table.forEach((i) => {
+      i.card = null;
+    });
   }
 
   /** Prepare this view for notifying the player. */
@@ -491,23 +494,8 @@ export default class App extends Vue {
     this.conn.onPlayerWin(this.playerWon, true);
     this.conn.onGameOver(this.gameEnded, true);
     this.conn.onPlayerMsg(this.addMessage, true);
-    this.conn.onGameRestart((resp) => {
-      // This will automatically initiate a cooldown for refreshing the table.
-      this.previousTurnLength = Number.POSITIVE_INFINITY;
-      this.initialize();
-    });
-
-    this.conn.onGameRequest((resp) => {
-      const idx = this.restartRequestees.findIndex((id) => id === resp.player);
-      if (idx >= 0) {
-        this.restartRequestees.splice(idx, 1);
-      }
-
-      this.restartRequestees.push(resp.player);
-      if (this.restartRequestees.findIndex((id) => id === this.playerID) === -1) {
-        this.restartRequest = true;
-      }
-    }, true);
+    this.conn.onGameRestart(this.gameRestarted, true);
+    this.conn.onGameRequest(this.restartRequested, true);
   }
 
   /* Game events */
@@ -534,7 +522,9 @@ export default class App extends Vue {
     this.roomJoined = resp.room;
 
     resp.response.escaped.forEach((id) => {
-      this.winners[id] = true;
+      if (this.winners.indexOf(id) === -1) {
+        this.winners.push(id);
+      }
     });
 
     // Set player states.
@@ -655,7 +645,10 @@ export default class App extends Vue {
   /** We've been notified that some player has ditched all their cards. */
   private playerWon(resp: ServerMessage<{}>) {
     const idx = this.table.findIndex((i) => i.id === resp.player);
-    this.winners[resp.player] = true;
+    if (this.winners.indexOf(resp.player) === -1) {
+      this.winners.push(resp.player);
+    }
+
     if (this.playerID === resp.player) {
       this.overlayMsgs.push(`Congrats! You've escaped!`);
     } else {
@@ -665,16 +658,51 @@ export default class App extends Vue {
 
   /** We've been notified that the game has ended. */
   private gameEnded(resp: ServerMessage<{}>) {
+    this.restartRequestees = [];
+    // Reset game state and prompt the player for restarting the game after some delay.
+    setTimeout(() => {
+      this.resetGameState();
+      this.restartRequest = true;
+    }, 5000);
+
     if (this.playerID === resp.player) {
       this.overlayMsgs.push(`You've got leftover cards. You lose.`);
-    } else {
+    } else if (resp.player !== '') {
       this.overlayMsgs.push(`${resp.player} has leftover card(s) and loses.`);
+    } else {
+      this.overlayMsgs.push(`It's a tie!`);
     }
   }
 
+  /** The game has been restarted by the server. */
+  private gameRestarted(resp: ServerMessage<{}>) {
+    this.resetGameState();
+    // Reset player notifications and dialogs.
+    this.restartRequest = false;
+    this.restartRequestees = [];
+    this.overlayMsgs = [];
+    // This will automatically initiate a cooldown for refreshing the table.
+    this.previousTurnLength = Number.POSITIVE_INFINITY;
+    this.showAlert('Majority of players want to restart the game.', 'info');
+  }
+
+  /** Request restart for the current game. */
   private requestGameRestart() {
     this.restartRequest = false;
     this.conn.requestNewGmae(this.playerID, this.roomJoined!);
+  }
+
+  /** A restart request has been received. */
+  private restartRequested(resp: ServerMessage<{}>) {
+    const idx = this.restartRequestees.findIndex((id) => id === resp.player);
+    if (idx >= 0) {
+      this.restartRequestees.splice(idx, 1);
+    }
+
+    this.restartRequestees.push(resp.player);
+    if (this.restartRequestees.findIndex((id) => id === this.playerID) === -1) {
+      this.restartRequest = true;
+    }
   }
 
   /** Sets the snackbar message. */
@@ -794,7 +822,8 @@ export default class App extends Vue {
 
   /** Player has ended the tutorial. */
   private endTutorial() {
-    this.initialize();
+    this.roomJoined = null;
+    this.resetGameState();
     // NOTE: We shouldn't add listeners again here (ConnectionProvider uses statics).
   }
 }
