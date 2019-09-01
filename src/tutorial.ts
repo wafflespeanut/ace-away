@@ -66,6 +66,14 @@ export default class TutorialProvider implements GameEventHub {
     });
   }
 
+  public onSocketClose(callback: () => void, persist?: boolean) {
+    //
+  }
+
+  public onSocketError(callback: () => void, persist?: boolean) {
+    //
+  }
+
   public propagateMessage(data: ServerMessage<any>) {
     const callbacks = this.callbacks[data.event];
     if (callbacks) {

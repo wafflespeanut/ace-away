@@ -141,15 +141,23 @@ func (r *Room) tableReachedLimit() bool {
 	return l == 0
 }
 
-// forgottenPlayer who has left this room at some point.
-func (r *Room) forgottenPlayer() (string, *Player) {
+// forgottenPlayer returns a player who has left this room at some point.
+// If an existing ID matches the new ID, then that player is returned instead.
+func (r *Room) forgottenPlayer(newID string) (string, *Player) {
+	var someID string
+	var somePlayer *Player
 	for id, p := range r.players {
 		if p.left {
-			return id, p
+			if newID == id {
+				return id, p
+			}
+
+			someID = id
+			somePlayer = p
 		}
 	}
 
-	return "", nil
+	return someID, somePlayer
 }
 
 // setDealerForNextRound resets previous dealers, gets the player
@@ -326,6 +334,7 @@ func (r *Room) startGame() {
 		// If player has a spade ace, then they're the dealer.
 		for _, card := range p.hand {
 			if card.Label == aceSpade.Label && card.Suite == aceSpade.Suite {
+				log.Printf("Ace cards in room %s: %s\n", p.roomID, r.acePlayerCollection)
 				p.dealer = true
 				r.currentTurn = p.index
 			}
@@ -554,7 +563,7 @@ func (hub *Hub) addPlayerToUnlockedRoom(ws *websocket.Conn, room *Room, roomID, 
 	swapPlayer := ""
 
 	if room.isFull() {
-		oldID, oldPlayer := room.forgottenPlayer()
+		oldID, oldPlayer := room.forgottenPlayer(playerID)
 		if oldPlayer == nil {
 			return &HandlerError{
 				Msg:   fmt.Sprintf("Room %s is full. Pick a different room.", roomID),
@@ -584,9 +593,13 @@ func (hub *Hub) addPlayerToUnlockedRoom(ws *websocket.Conn, room *Room, roomID, 
 	}
 
 	if swapPlayer != "" {
-		player = room.players[swapPlayer]
-		player.conn = ws
-		player.left = false
+		log.Printf("Swapping player %s with %s\n", swapPlayer, playerID)
+		oldPlayer := room.players[swapPlayer]
+		player.hand = oldPlayer.hand
+		player.dealer = oldPlayer.dealer
+		player.index = oldPlayer.index
+		player.exited = oldPlayer.exited
+		// NOTE: Ignore `left` and `requestedRestart` fields.
 		delete(room.players, swapPlayer)
 	}
 
@@ -628,7 +641,7 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID, playerID string
 			defer room.lock.Unlock()
 
 			if room.isFull() {
-				_, oldPlayer := room.forgottenPlayer()
+				_, oldPlayer := room.forgottenPlayer(playerID)
 				if oldPlayer == nil {
 					return &HandlerError{
 						Msg:   fmt.Sprintf("Room %s already exists and is full. Choose a different name.", roomID),

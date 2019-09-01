@@ -24,6 +24,10 @@ export default class ConnectionProvider implements GameEventHub {
 
   private static errorCallbacks: Array<Callback<(msg: string, event: GameEvent) => void>> = [];
 
+  private static socketErrorCallbacks: Array<Callback<() => void>> = [];
+
+  private static disconnectCallbacks: Array<Callback<() => void>> = [];
+
   /* Interface methods */
 
   public createRoom(playerId: string, roomName: string, numPlayers: number) {
@@ -106,6 +110,20 @@ export default class ConnectionProvider implements GameEventHub {
 
   public onError(callback: (msg: string, event: GameEvent) => void, persist?: boolean) {
     ConnectionProvider.errorCallbacks.push({
+      callback,
+      persist,
+    });
+  }
+
+  public onSocketClose(callback: () => void, persist?: boolean) {
+    ConnectionProvider.disconnectCallbacks.push({
+      callback,
+      persist,
+    });
+  }
+
+  public onSocketError(callback: () => void, persist?: boolean) {
+    ConnectionProvider.socketErrorCallbacks.push({
       callback,
       persist,
     });
@@ -194,6 +212,16 @@ export default class ConnectionProvider implements GameEventHub {
 
     socket.onmessage = (e) => {
       this.onMessage(e);
+    };
+
+    socket.onerror = () => {
+      ConnectionProvider.socketErrorCallbacks.forEach((c) => c.callback());
+      ConnectionProvider.socketErrorCallbacks = ConnectionProvider.socketErrorCallbacks.filter((c) => c.persist);
+    };
+
+    socket.onclose = () => {
+      ConnectionProvider.disconnectCallbacks.forEach((c) => c.callback());
+      ConnectionProvider.disconnectCallbacks = ConnectionProvider.disconnectCallbacks.filter((c) => c.persist);
     };
   }
 }

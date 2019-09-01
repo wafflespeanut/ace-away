@@ -299,6 +299,9 @@ export default class App extends Vue {
   /** Whether the user is focusing on the app. */
   private hasFocus: boolean = false;
 
+  /** Whether this is a running game. */
+  private gameBegun: boolean = false;
+
   /* Constants used by models */
 
   /** Allowed choices for players in rooms. */
@@ -496,6 +499,12 @@ export default class App extends Vue {
     this.conn.onPlayerMsg(this.addMessage, true);
     this.conn.onGameRestart(this.gameRestarted, true);
     this.conn.onGameRequest(this.restartRequested, true);
+    this.conn.onSocketError(() => {
+      this.showAlert(`Error requesting server. You're probably disconnected.`, 'error');
+    }, true);
+    this.conn.onSocketClose(() => {
+      this.showAlert(`You're now offline.`, 'error');
+    }, true);
   }
 
   /* Game events */
@@ -541,8 +550,11 @@ export default class App extends Vue {
     if (diff > 0) {
       this.alertType = 'info';
       this.alertMsg = `Waiting for ${diff} more player(s) in room ${resp.room}.`;
+    } else if (this.gameBegun) {
+      this.showAlert(`Yay! Let's continue playing!`);
     } else {
       this.showAlert(`Yay! Let's begin!`);
+      this.gameBegun = true;
     }
   }
 

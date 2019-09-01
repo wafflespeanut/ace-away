@@ -87,4 +87,8 @@ export default interface GameEventHub {
     onGameRequest(callback: (resp: ServerMessage<{}>) => void, persist?: boolean): void;
 
     onGameRestart(callback: (resp: ServerMessage<{}>) => void, persist?: boolean): void;
+
+    onSocketError(callback: () => void, persist?: boolean): void;
+
+    onSocketClose(callback: () => void, persist?: boolean): void;
 }
