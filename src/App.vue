@@ -124,7 +124,10 @@
                               :height="cardSize"
                               :width="cardSize"
                               class="d-flex justify-center align-center">
-                        <span class="display-1">{{ l.label }} {{ prettyMap[item.suite] }}</span>
+                        <span :class="{
+                          'headline': $vuetify.breakpoint.xs,
+                          'display-1': $vuetify.breakpoint.smAndUp,
+                        }">{{ l.label }} {{ prettyMap[item.suite] }}</span>
                       </v-card>
                     </v-item>
                   </transition-group>
