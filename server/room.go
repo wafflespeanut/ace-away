@@ -117,14 +117,26 @@ func (r *Room) debugString() string {
 func (r *Room) endRound() []string {
 	playerIDs := make([]string, 0)
 
-	r.table = make([]PlayerCard, 0)
 	for id, p := range r.players {
 		if len(p.hand) == 0 && !p.exited {
+			if r.currentTurn == p.index {
+				// We've encountered an edge case where a player has
+				// exited with a high card. Set the dealer again.
+				for i, c := range r.table {
+					if c.ID == id {
+						r.table[i].Card.Label = "" // will be skipped during checks
+						r.setDealerForNextRound()
+						break
+					}
+				}
+			}
+
 			p.exited = true
 			playerIDs = append(playerIDs, id)
 		}
 	}
 
+	r.table = make([]PlayerCard, 0)
 	return playerIDs
 }
 
@@ -167,9 +179,13 @@ func (r *Room) setDealerForNextRound() (string, *Player) {
 	highRank := uint8(0)
 	player := ""
 	for _, c := range r.table {
-		r := labelRanks[c.Card.Label]
-		if r > highRank {
-			highRank = r
+		if c.Card.Label == "" { // opaque label for skipping
+			continue
+		}
+
+		rank := labelRanks[c.Card.Label]
+		if rank > highRank {
+			highRank = rank
 			player = c.ID
 		}
 	}
