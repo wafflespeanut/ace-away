@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"golang.org/x/net/websocket"
@@ -97,6 +98,8 @@ type Room struct {
 	// then the start accumulating high rank cards. This is reset
 	// when another player loses.
 	acePlayerCollection []Card
+	// Timestamp of the last performed action in this room.
+	lastUpdatedTime time.Time
 }
 
 // `debugString` for `Room`.
@@ -398,6 +401,7 @@ func (hub *Hub) validateAndApplyTurn(ws *websocket.Conn, roomID, playerID string
 	}
 
 	room.lock.Lock()
+	room.lastUpdatedTime = time.Now()
 	defer room.lock.Unlock()
 
 	player, exists := room.players[playerID]
@@ -576,6 +580,7 @@ func (hub *Hub) addPlayer(ws *websocket.Conn, roomID, playerID string) *HandlerE
 // addPlayerToUnlockedRoom accepts an unlocked room and does whatever `addPlayer` method says.
 // The method has been split so as to avoid a possible race condition.
 func (hub *Hub) addPlayerToUnlockedRoom(ws *websocket.Conn, room *Room, roomID, playerID string) *HandlerError {
+	room.lastUpdatedTime = time.Now()
 	swapPlayer := ""
 
 	if room.isFull() {
@@ -691,6 +696,7 @@ func (hub *Hub) createRoomWithPlayer(ws *websocket.Conn, roomID, playerID string
 		limit:               req.Players,
 		table:               make([]PlayerCard, 0),
 		acePlayerCollection: make([]Card, 0),
+		lastUpdatedTime:     time.Now(),
 	}
 
 	hub.setRoom(roomID, room)
@@ -713,6 +719,7 @@ func (hub *Hub) shareMessage(ws *websocket.Conn, roomID, playerID, msg string) {
 	}
 
 	room.lock.Lock()
+	room.lastUpdatedTime = time.Now()
 	defer room.lock.Unlock()
 
 	for _, p := range room.players {
@@ -736,6 +743,7 @@ func (hub *Hub) playerRequestedNewGame(ws *websocket.Conn, roomID, playerID stri
 	}
 
 	room.lock.Lock()
+	room.lastUpdatedTime = time.Now()
 	defer room.lock.Unlock()
 
 	player, exists := room.players[playerID]

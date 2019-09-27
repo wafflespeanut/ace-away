@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"time"
 
 	"golang.org/x/net/websocket"
 )
@@ -22,6 +23,8 @@ type Hub struct {
 	connChan chan string
 	// Ack channel for other operations.
 	ackChan chan bool
+	// Ticker for this hub to perform cleanups over some interval.
+	ticker *time.Ticker
 }
 
 type hubCmdType int
@@ -29,7 +32,6 @@ type hubCmdType int
 const (
 	cmdSetRoom = iota
 	cmdGetRoom
-	cmdDeleteRoom
 	cmdSetConnection
 	cmdDeleteConnection
 )
@@ -66,15 +68,6 @@ func (hub *Hub) setRoom(roomID string, room *Room) {
 	_ = <-hub.ackChan
 }
 
-// deleteRoom corresponding to the given room ID.
-func (hub *Hub) deleteRoom(roomID string) {
-	hub.cmdChan <- hubCommand{
-		ty:     cmdDeleteRoom,
-		roomID: roomID,
-	}
-	_ = <-hub.ackChan
-}
-
 // setConnection to the given room ID.
 func (hub *Hub) setConnection(ws *websocket.Conn, roomID string) {
 	hub.cmdChan <- hubCommand{
@@ -95,33 +88,54 @@ func (hub *Hub) deleteConnection(ws *websocket.Conn) (string, bool) {
 	return id, id != ""
 }
 
-// handleCommands for this hub.
+// watchEvents for handling commands and performing cleanup in this hub.
 //
 // **NOTE:** This must be launched into a separate goroutine.
-func (hub *Hub) handleCommands() {
+func (hub *Hub) watchEvents() {
 	for {
-		cmd := <-hub.cmdChan
-		if cmd.ty == cmdGetRoom {
-			room := hub.rooms[cmd.roomID]
-			hub.roomChan <- room
-		} else if cmd.ty == cmdSetRoom {
-			hub.rooms[cmd.roomID] = cmd.room
-			hub.ackChan <- true
-		} else if cmd.ty == cmdDeleteRoom {
-			_, exists := hub.rooms[cmd.roomID]
-			delete(hub.rooms, cmd.roomID)
-			hub.ackChan <- exists
-		} else if cmd.ty == cmdSetConnection {
-			hub.connRooms[cmd.ws] = cmd.roomID
-			hub.ackChan <- true
-		} else if cmd.ty == cmdDeleteConnection {
-			roomID, exists := hub.connRooms[cmd.ws]
-			if !exists {
-				roomID = ""
-			}
+		select {
+		case <-hub.ticker.C:
+			currentTime := time.Now()
+			for id, room := range hub.rooms {
+				room.lock.Lock()
+				allLeft := true
+				for _, p := range room.players {
+					allLeft = allLeft && p.left
+				}
 
-			delete(hub.connRooms, cmd.ws)
-			hub.connChan <- roomID
+				if !allLeft {
+					room.lock.Unlock()
+					continue
+				}
+
+				diff := currentTime.Sub(room.lastUpdatedTime)
+				if diff.Minutes() < roomDeletionTimeoutMinutes {
+					room.lock.Unlock()
+					continue
+				}
+
+				log.Printf("Removing room %s after timeout.\n", id)
+				delete(hub.rooms, id)
+			}
+		case cmd := <-hub.cmdChan:
+			if cmd.ty == cmdGetRoom {
+				room := hub.rooms[cmd.roomID]
+				hub.roomChan <- room
+			} else if cmd.ty == cmdSetRoom {
+				hub.rooms[cmd.roomID] = cmd.room
+				hub.ackChan <- true
+			} else if cmd.ty == cmdSetConnection {
+				hub.connRooms[cmd.ws] = cmd.roomID
+				hub.ackChan <- true
+			} else if cmd.ty == cmdDeleteConnection {
+				roomID, exists := hub.connRooms[cmd.ws]
+				if !exists {
+					roomID = ""
+				}
+
+				delete(hub.connRooms, cmd.ws)
+				hub.connChan <- roomID
+			}
 		}
 	}
 }
@@ -189,8 +203,7 @@ func (hub *Hub) dropPlayer(ws *websocket.Conn, playerID string) {
 	}
 
 	if allLeft {
-		log.Printf("All players have left. Removing room %s\n", roomID)
-		hub.deleteRoom(roomID)
+		log.Printf("All players have left the room %s\n", roomID)
 	}
 }
 

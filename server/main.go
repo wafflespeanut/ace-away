@@ -38,8 +38,9 @@ const (
 	// Server has agreed to restart the game.
 	eventGameRestart = "GameRestart"
 
-	minPlayers = 3
-	maxPlayers = 6
+	minPlayers                 = 3
+	maxPlayers                 = 6
+	roomDeletionTimeoutMinutes = 5
 )
 
 func main() {
@@ -55,8 +56,9 @@ func main() {
 		roomChan:  make(chan *Room),
 		connChan:  make(chan string),
 		ackChan:   make(chan bool),
+		ticker:    time.NewTicker(30 * time.Second),
 	}
-	go hub.handleCommands()
+	go hub.watchEvents()
 
 	if *pathPtr == "" {
 		flag.PrintDefaults()
