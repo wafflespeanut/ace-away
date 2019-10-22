@@ -14,7 +14,7 @@
     "vuetify": "2.0.7"
   },
   "devDependencies": {
-    "@vue/cli-plugin-babel": "^3.11.0",
+    "@vue/cli-plugin-babel": "^4.0.5",
     "@vue/cli-plugin-typescript": "^3.11.0",
     "@vue/cli-service": "^3.11.0",
     "sass": "^1.23.0",
